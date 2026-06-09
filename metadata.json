@@ -1,0 +1,6 @@
+{
+  "name": "জান্নাত সন্ধান",
+  "description": "Premium Islamic Super App with Prayer times, Quran, Qibla compass, Tasbih tracker, Ramadan tools, and Islamic AI Assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

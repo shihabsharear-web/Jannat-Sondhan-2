@@ -1,0 +1,704 @@
+// ===================================================================================
+// IN-HOME DASHBOARD (Islamic Hub with quick inline tools and cards)
+// ===================================================================================
+@Composable
+fun HomeDashboardView(
+    viewModel: IbadahViewModel,
+    isBn: Boolean,
+    onTabSelect: (Int) -> Unit,
+    onSubViewSelected: (String) -> Unit
+) {
+    val selectedCity by viewModel.selectedCity.collectAsState()
+    val nextPrayerName by viewModel.nextPrayerName.collectAsState()
+    val countdown by viewModel.prayerCountdown.collectAsState()
+    val language by viewModel.appLanguage.collectAsState()
+
+    var showForbiddenDialog by remember { mutableStateOf(false) }
+    var homeActiveTab by remember { mutableIntStateOf(0) } // 0 = Dashboard, 1 = Daily Tracker
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Hadith Ticker: Sticky/Always visible at the top!
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(2.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                    .padding(vertical = 6.dp, horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoStories,
+                    contentDescription = "Hadith Logo",
+                    tint = IslamicGold,
+                    modifier = Modifier.size(16.dp)
+                )
+                
+                val calendar = Calendar.getInstance()
+                val dayOfYear = calendar.get(Calendar.DAY_OF_YEAR)
+                val index = dayOfYear % dailyHadiths.size
+                val activeHadithPair = dailyHadiths[index]
+                val hadithText = if (isBn) activeHadithPair.first else activeHadithPair.second
+                
+                HadithScrollingTicker(
+                    text = hadithText,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(2.dp))
+
+        // Premium Custom Segmented Control / Pill Tabs
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            val tabLabelBn = listOf("ইবাদত ড্যাশবোর্ড", "নেক আমল ট্র্যাকার")
+            val tabLabelEn = listOf("Ibadah Dashboard", "Righteous Deeds Tracker")
+            val labels = if (isBn) tabLabelBn else tabLabelEn
+
+            labels.forEachIndexed { idx, label ->
+                val selected = homeActiveTab == idx
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (selected) EmeraldDeep else Color.Transparent)
+                        .clickable { homeActiveTab = idx }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+
+        if (homeActiveTab == 0) {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 1. Salat Calendar
+                item {
+                    val pTimes = listOf(
+                        Triple("ফজর", "Fajr", selectedCity.fajrTime),
+                        Triple("যোহর", "Dhuhr", selectedCity.dhuhrTime),
+                        Triple("আসর", "Asr", selectedCity.asrTime),
+                        Triple("মাগরিব", "Maghrib", selectedCity.maghribTime),
+                        Triple("এশা", "Isha", selectedCity.ishaTime)
+                    )
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+                        elevation = CardDefaults.cardElevation(2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.AccessTime,
+                                        contentDescription = null,
+                                        tint = EmeraldDeep,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isBn) "সকল ওয়াক্তের সময়সূচী" else "All Prayer Times",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = EmeraldDeep.copy(alpha = 0.1f)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isBn) "পরবর্তী: " else "Next: ",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = EmeraldDeep
+                                        )
+                                        Text(
+                                            text = "$nextPrayerName ($countdown)",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = EmeraldDeep
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(14.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            
+                            pTimes.forEach { (nameBn, nameEn, timeStr) ->
+                                val displayName = if (isBn) nameBn else nameEn
+                                val isNext = nextPrayerName.trim().equals(nameBn, ignoreCase = true) || nextPrayerName.trim().equals(nameEn, ignoreCase = true)
+                                
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (isNext) EmeraldDeep.copy(alpha = 0.08f) else Color.Transparent,
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 7.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (isNext) Icons.Default.AlarmOn else Icons.Default.NotificationsNone,
+                                            contentDescription = null,
+                                            tint = if (isNext) EmeraldDeep else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = displayName,
+                                            fontWeight = if (isNext) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isNext) EmeraldDeep else MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                    
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (isNext) {
+                                            Text(
+                                                text = if (isBn) "বাকি আছে: " else "Left: ",
+                                                fontSize = 11.sp,
+                                                color = EmeraldDeep.copy(alpha = 0.8f)
+                                            )
+                                            Text(
+                                                text = countdown,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = EmeraldDeep,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                        }
+                                        Text(
+                                            text = formatTo12Hour(timeStr, language),
+                                            fontWeight = if (isNext) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isNext) EmeraldDeep else MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 13.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Today's Fasting
+                item {
+                    val currentHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                    val isSehriCycle = currentHour < 4 || (currentHour >= 20)
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+                        elevation = CardDefaults.cardElevation(2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.WbSunny,
+                                        contentDescription = null,
+                                        tint = IslamicGold,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isBn) "আজকের সেহরি ও ইফতার" else "Today's Sehri & Iftar",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.height(10.dp))
+                                
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    Column {
+                                        Text(
+                                            text = if (isBn) "সেহরি শেষ" else "Sehri Ends",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = formatTo12Hour(selectedCity.sahriTime, language),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = if (isBn) "ইফতারের সময়" else "Iftar Time",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = formatTo12Hour(selectedCity.iftarTime, language),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = EmeraldDeep
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = IslamicGold.copy(alpha = 0.1f)),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = if (isSehriCycle) {
+                                            if (isBn) "সেহরির বাকি" else "Sehri Left"
+                                        } else {
+                                            if (isBn) "ইফতারের বাকি" else "Iftar Left"
+                                        },
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = IslamicGold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = countdown,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = IslamicGold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Dynamic Forbidden Times Banner
+                item {
+                    val forbiddenState by viewModel.forbiddenTimeState.collectAsState()
+                    forbiddenState?.let { fState ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showForbiddenDialog = true },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (fState.isActive) Color(0xFF8C1D1D) else MaterialTheme.colorScheme.surface
+                            ),
+                            border = BorderStroke(1.dp, if (fState.isActive) Color(0xFFB52A2A) else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
+                            elevation = CardDefaults.cardElevation(2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = if (fState.isActive) Color.White else Color(0xFFC93B3B),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = if (fState.isActive) {
+                                                if (isBn) "নামাজ পড়া নিষিদ্ধ সময়!" else "Forbidden Prayer Time!"
+                                            } else {
+                                                if (isBn) "এখন নামাজ পড়ার সঠিক সময়" else "Halal Prayer Time"
+                                            },
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = if (fState.isActive) Color.White else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = if (fState.isActive) {
+                                                if (isBn) "চলমান নিষিদ্ধ সময়: ${fState.activeWindowName}" else "Active: ${fState.activeWindowName}"
+                                            } else {
+                                                if (isBn) "পরবর্তী নিষিদ্ধ সময়: ${fState.nextWindowName} (${fState.nextStartTimeStr})" else "Next makruh window: ${fState.nextWindowName} (${fState.nextStartTimeStr})"
+                                            },
+                                            fontSize = 11.sp,
+                                            color = if (fState.isActive) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = if (fState.isActive) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Forbidden alert detailed dialog
+                    if (showForbiddenDialog) {
+                        val forbiddenStateVal by viewModel.forbiddenTimeState.collectAsState()
+                        forbiddenStateVal?.let { fState ->
+                            val win1Start = "04:55"
+                            val win1End = "05:15"
+                            val win2Start = "12:00"
+                            val win2End = "12:10"
+                            val win3Start = "18:35"
+                            val win3End = "18:45"
+                            
+                            AlertDialog(
+                                onDismissRequest = { showForbiddenDialog = false },
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = Color(0xFFC93B3B),
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                },
+                                title = {
+                                    Text(
+                                        text = if (language == AppLanguage.BN) "পবিত্র হাদিস অনুসারে নিষিদ্ধ ৩ সময়" else if (language == AppLanguage.AR) "الأوقات الثلاثة المحظورة" else "3 Forbidden Prayer Times",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                },
+                                text = {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .verticalScroll(rememberScrollState()),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text(
+                                            text = if (language == AppLanguage.BN) "সূর্যোদয়, দুপুর ও সূর্যাস্তের নির্দিষ্ট সময়গুলোতে যেকোনো সালাত আদায় করা সম্পূর্ণ হারাম/নিষিদ্ধ।" else "It is completely forbidden / Makruh Tahrimi to perform any salah during sunrise, solar meridian (midday zawaal), and sunset.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                        
+                                        // Window 1: Sunrise
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(if (fState.activeWindowName.contains("Sunrise") || fState.activeWindowName.contains("সূর্যোদয়")) Color(0x1DF44336) else Color.Transparent, RoundedCornerShape(8.dp))
+                                                .padding(6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = if (language == AppLanguage.BN) "১. সূর্যोदयকালীন নিষিদ্ধ সময়" else "1. Sunrise Window",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
+                                                )
+                                                Text(
+                                                    text = if (language == AppLanguage.BN) "সূর্য ওঠা থেকে সম্পূর্ণ বলয় দৃশ্যমান হওয়া পর্যন্ত" else "From sunrise until fully elevated (~15-20 mins)",
+                                                    fontSize = 9.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Text(
+                                                text = "$win1Start - $win1End",
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp,
+                                                color = if (fState.activeWindowName.contains("Sunrise") || fState.activeWindowName.contains("সূর্যোদয়")) Color(0xFFC93B3B) else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        
+                                        // Window 2: Midday
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(if (fState.activeWindowName.contains("Midday") || fState.activeWindowName.contains("মধ্যাহ্ন")) Color(0x1DF44336) else Color.Transparent, RoundedCornerShape(8.dp))
+                                                .padding(6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = if (language == AppLanguage.BN) "২. ঠিক মধ্যাহ্ন (মাথা বরাবর সূর্য)" else "2. Solar Meridian Window",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
+                                                )
+                                                Text(
+                                                    text = if (language == AppLanguage.BN) "সূর্য ঠিক মাথার উপরে অবস্থানকালে (যাওয়াল পূর্ব মুহূর্ত)" else "When sun is at its absolute zenith (~5-10 mins before Dhuhr)",
+                                                    fontSize = 9.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Text(
+                                                text = "$win2Start - $win2End",
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp,
+                                                color = if (fState.activeWindowName.contains("Midday") || fState.activeWindowName.contains("মধ্যাহ্ন")) Color(0xFFC93B3B) else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        
+                                        // Window 3: Sunset
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(if (fState.activeWindowName.contains("Sunset") || fState.activeWindowName.contains("সূর্যাস্ত")) Color(0x1DF44336) else Color.Transparent, RoundedCornerShape(8.dp))
+                                                .padding(6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = if (language == AppLanguage.BN) "৩. সূর্যাস্তকালীন নিষিদ্ধ সময়" else "3. Sunset Window",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
+                                                )
+                                                Text(
+                                                    text = if (language == AppLanguage.BN) "সূর্য লালচে হয়ে অস্ত যাওয়া শুরু হতে সম্পূর্ণ অস্ত যাওয়া" else "From sun becoming reddish until fully set (~15 mins before Maghrib)",
+                                                    fontSize = 9.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Text(
+                                                text = "$win3Start - $win3End",
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp,
+                                                color = if (fState.activeWindowName.contains("Sunset") || fState.activeWindowName.contains("সূর্যাস্ত")) Color(0xFFC93B3B) else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = { showForbiddenDialog = false }) {
+                                        Text(text = if (language == AppLanguage.BN) "ঠিক আছে" else "Okay")
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // 4. Special Premium Card: নামাজ শিক্ষা (Prayer Education)
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSubViewSelected("prayer_education") },
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = EmeraldDeep.copy(alpha = 0.95f),
+                            contentColor = Color.White
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    imageVector = Icons.Default.MenuBook,
+                                    contentDescription = "Prayer Book Icon",
+                                    tint = IslamicGold,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = if (isBn) "সহজ নামাজ শিক্ষা" else "Learn Namaj (Salah Guide)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = if (isBn) "চিত্রসহ নামাজের নিয়ম, রাকাতসমূহ ও জরুরি দোয়া সমূহ" else "Step-by-step prayers rules, Rak'at list & daily Supplications",
+                                        fontSize = 10.sp,
+                                        color = Color.White.copy(alpha = 0.85f),
+                                        lineHeight = 14.sp
+                                    )
+                                }
+                            }
+                            
+                            Icon(
+                                imageVector = Icons.Default.ArrowForward,
+                                contentDescription = null,
+                                tint = IslamicGold,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                // 5. Islamic Super Features Blocks
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+                        elevation = CardDefaults.cardElevation(2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = if (isBn) "ইসলামিক ফিচার সমূহ" else "Islamic Core Features",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            
+                            // Row 1
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                QuickActionItem(
+                                    label = if (isBn) "আল-কুরআন" else "Al-Quran",
+                                    icon = Icons.Default.Book,
+                                    onClick = { onSubViewSelected("quran") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickActionItem(
+                                    label = if (isBn) "আল-হাদিস" else "Hadith Core",
+                                    icon = Icons.Default.LibraryBooks,
+                                    onClick = { onSubViewSelected("hadith") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickActionItem(
+                                    label = if (isBn) "নামাজের সময়" else "Prayer Times",
+                                    icon = Icons.Default.Schedule,
+                                    onClick = { onTabSelect(1) }, // Switch to Prayer Tab
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            
+                            // Row 2
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                QuickActionItem(
+                                    label = if (isBn) "কিবলা কম্পাস" else "Qibla Finder",
+                                    icon = Icons.Default.CompassCalibration,
+                                    onClick = { onSubViewSelected("qibla") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickActionItem(
+                                    label = if (isBn) "ডিজিটাল তাসবিহ" else "Digital Tasbih",
+                                    icon = Icons.Default.Fingerprint,
+                                    onClick = { onSubViewSelected("tasbih") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickActionItem(
+                                    label = if (isBn) "যাকাত ক্যালকুলেটর" else "Zakat Calc",
+                                    icon = Icons.Default.Calculate,
+                                    onClick = { onSubViewSelected("zakat") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            
+                            // Row 3
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                QuickActionItem(
+                                    label = if (isBn) "ইসলামিক এআই" else "Islamic AI",
+                                    icon = Icons.Default.AutoAwesome,
+                                    onClick = { onSubViewSelected("ai_chat") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickActionItem(
+                                    label = if (isBn) "আল্লাহর ৯৯ নাম" else "99 Names",
+                                    icon = Icons.Default.Star,
+                                    onClick = { onSubViewSelected("allah_names") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickActionItem(
+                                    label = if (isBn) "দোয়া ও জিকির" else "Duas & Supps",
+                                    icon = Icons.Default.Bookmark,
+                                    onClick = { onSubViewSelected("duas") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            DailyDeedsTrackerView(
+                viewModel = viewModel,
+                isBn = isBn,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            )
+        }
+    }
+}
