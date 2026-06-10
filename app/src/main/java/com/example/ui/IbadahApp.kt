@@ -333,6 +333,7 @@ fun IbadahApp(viewModel: IbadahViewModel) {
     val currentClockTime by viewModel.currentClockTime.collectAsState()
     val isBn = language == AppLanguage.BN
 
+    var showOnboarding by remember { mutableStateOf(true) }
     var selectedTab by remember { mutableStateOf(0) } // 0: Home/Prayer, 1: Schedule, 2: Quran, 3: Compass & Dhikr, 4: Tools & Ramadan, 5: Live & AI, 6: Settings / Notice
     var homeSubView by remember { mutableStateOf("dashboard") }
 
@@ -341,7 +342,7 @@ fun IbadahApp(viewModel: IbadahViewModel) {
     // Natural Back Navigation: If reading a Quran Surah, close the Surah first.
     // If in any Home subview, return to main dashboard.
     // If on any tab other than Home, return to Home.
-    BackHandler(enabled = selectedSurah != null || homeSubView != "dashboard" || selectedTab != 0) {
+    BackHandler(enabled = !showOnboarding && (selectedSurah != null || homeSubView != "dashboard" || selectedTab != 0)) {
         if (selectedSurah != null) {
             viewModel.selectSurah(null)
         } else if (homeSubView != "dashboard") {
@@ -443,7 +444,13 @@ fun IbadahApp(viewModel: IbadahViewModel) {
     }
 
     MyApplicationTheme(darkTheme = isDark) {
-        Scaffold(
+        if (showOnboarding) {
+            OnboardingScreen(
+                onFinished = { showOnboarding = false },
+                isBn = isBn
+            )
+        } else {
+            Scaffold(
             topBar = {
                 if (selectedTab == 0 && homeSubView == "dashboard") {
                     Box(
@@ -849,6 +856,7 @@ fun IbadahApp(viewModel: IbadahViewModel) {
                     }
                 }
             }
+        }
         }
     }
 }
@@ -5952,55 +5960,126 @@ fun IslamicAudioCard(
 @Composable
 fun YoutubePlayer(videoId: String, modifier: Modifier = Modifier) {
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-    var currentVideoId by remember { mutableStateOf(videoId) }
-    var youtubePlayerInstance by remember { mutableStateOf<com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer?>(null) }
+    var playerViewInstance: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView? by remember { mutableStateOf(null) }
 
-    LaunchedEffect(videoId) {
-        if (videoId != currentVideoId) {
-            currentVideoId = videoId
-            youtubePlayerInstance?.loadVideo(videoId, 0f)
+    DisposableEffect(lifecycleOwner) {
+        onDispose {
+            playerViewInstance?.let { pv ->
+                try {
+                    lifecycleOwner.lifecycle.removeObserver(pv)
+                    pv.release()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { context ->
-            com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView(context).apply {
-                lifecycleOwner.lifecycle.addObserver(this)
+    androidx.compose.runtime.key(videoId) {
+        androidx.compose.ui.viewinterop.AndroidView(
+            modifier = modifier.fillMaxSize(),
+            factory = { context ->
+                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView(context).apply {
+                    playerViewInstance = this
+                    lifecycleOwner.lifecycle.addObserver(this)
+                    addYouTubePlayerListener(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
+                        override fun onReady(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
+                            youTubePlayer.loadVideo(videoId, 0f)
+                        }
+                    })
+                }
+            },
+            update = {}
+        )
+    }
+}
+
+@Composable
+fun BrowserVideoPlayer(urlOrVideoId: String, isYoutube: Boolean, modifier: Modifier = Modifier) {
+    androidx.compose.ui.viewinterop.AndroidView(
+        modifier = modifier.fillMaxSize(),
+        factory = { ctx ->
+            android.webkit.WebView(ctx).apply {
+                settings.apply {
+                    javaScriptEnabled = true
+                    mediaPlaybackRequiresUserGesture = false
+                    domStorageEnabled = true
+                    useWideViewPort = true
+                    loadWithOverviewMode = true
+                    databaseEnabled = true
+                    userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36"
+                }
+                webViewClient = android.webkit.WebViewClient()
+                webChromeClient = android.webkit.WebChromeClient()
                 
-                addYouTubePlayerListener(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
-                    override fun onReady(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
-                        youtubePlayerInstance = youTubePlayer
-                        youTubePlayer.loadVideo(videoId, 0f)
-                    }
-                })
+                val embedUrl = if (isYoutube) {
+                    "https://www.youtube.com/embed/$urlOrVideoId?autoplay=1&vq=hd720&controls=1&showinfo=0&rel=0"
+                } else {
+                    urlOrVideoId
+                }
+                
+                if (isYoutube) {
+                    loadUrl(embedUrl)
+                } else {
+                    val htmlContent = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <style>
+                                body, html { margin:0; padding:0; width:100%; height:100%; background-color:#000; overflow:hidden; display:flex; justify-content:center; align-items:center; }
+                                video { width:100% !important; height:auto; max-height:100%; outline:none; }
+                            </style>
+                        </head>
+                        <body>
+                            <video id="player" controls autoplay playsinline preload="auto">
+                                <source src="$urlOrVideoId" type="application/x-mpegURL">
+                                <source src="$urlOrVideoId" type="video/mp4">
+                                Your browser does not support HTML5 video streaming.
+                            </video>
+                        </body>
+                        </html>
+                    """.trimIndent()
+                    loadDataWithBaseURL("https://win.makkahlive.net", htmlContent, "text/html", "UTF-8", null)
+                }
             }
         },
-        update = { _ ->
-            // LaunchedEffect processes videoId changes
+        update = { webView ->
+            // No-op
         }
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
-    var activeUrl by remember { mutableStateOf("") }
     var activeTitle by remember { mutableStateOf("") }
     var activeYoutubeId by remember { mutableStateOf("") }
+    var activeStreamUrl by remember { mutableStateOf("") }
+
+    if (activeYoutubeId.isNotEmpty()) {
+        BackHandler {
+            activeYoutubeId = ""
+        }
+    }
+    if (activeStreamUrl.isNotEmpty()) {
+        BackHandler {
+            activeStreamUrl = ""
+            viewModel.exoPlayerManager.stop()
+        }
+    }
 
     // Custom media subsection tracks - defaulted to "waz" which is what user requested
     var mediaSubSection by remember { mutableStateOf("waz") } // "waz", "quran", "quran_translation", "nasheed", "video" (Live TV), "dua"
     var searchQuery by remember { mutableStateOf("") }
     var visibleItemCount by remember { mutableStateOf(15) }
 
-    // List of Live TV & Radio channels
+    // List of Live TV & Radio channels with 100% sacred Islamic images
     val liveChannels = listOf(
         com.example.data.IslamicVideo(
             id = "live_makkah",
             title = if (isBn) "মক্কা লাইভ সরাসরি (ক্বাবা শরীফ)" else "Makkah Live Stream (Holy Kaaba)",
             speaker = if (isBn) "সরাসরি সম্প্রচার" else "Live Broadcast",
-            thumbnail = "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=400",
+            thumbnail = "https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&q=80&w=400",
             duration = "Live",
             youtubeId = "",
             videoUrl = "https://win.makkahlive.net:8443/live/makkah.m3u8"
@@ -6009,7 +6088,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
             id = "live_madinah",
             title = if (isBn) "মদিনা লাইভ সরাসরি (মসজিদে নববী)" else "Madinah Live Stream (Masjid Al-Nabawi)",
             speaker = if (isBn) "সরাসরি সম্প্রচার" else "Live Broadcast",
-            thumbnail = "https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&q=80&w=400",
+            thumbnail = "https://images.unsplash.com/photo-1597935258735-e254c1839512?auto=format&fit=crop&q=80&w=400",
             duration = "Live",
             youtubeId = "",
             videoUrl = "https://win.madinahlive.net:8443/live/madinah.m3u8"
@@ -6018,7 +6097,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
             id = "live_quran",
             title = if (isBn) "আল কুরআন টিভি সরাসরি সম্প্রচার" else "Quran TV Live Stream",
             speaker = if (isBn) "সার্বক্ষণিক তিলাওয়াত" else "24/7 Recitation",
-            thumbnail = "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&q=80&w=400",
+            thumbnail = "https://images.unsplash.com/photo-1609599006353-e629f1d50218?auto=format&fit=crop&q=80&w=400",
             duration = "Live",
             youtubeId = "",
             videoUrl = "https://win.qurantv.net:8443/live/quran.m3u8"
@@ -6027,14 +6106,12 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
             id = "live_islamic",
             title = if (isBn) "ইসলামিক চ্যানেল লাইভ" else "Islamic TV Live Stream",
             speaker = if (isBn) "ইসলামিক আলোচনা" else "Islamic Lectures",
-            thumbnail = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=400",
+            thumbnail = "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&q=80&w=400",
             duration = "Live",
             youtubeId = "",
             videoUrl = "https://win.islamictv.net:8443/live/islamic.m3u8"
         )
     )
-
-    // No auto-preload on tab enter: wait for user explicit click
 
     // Reset search query and count on section change
     LaunchedEffect(mediaSubSection) {
@@ -6051,25 +6128,10 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
         // UNIFIED VIDEO-CENTRIC ISLAMIC MEDIA CENTER (NO AUDIO COLLECTION, ALL VIDEO!)
         Column(modifier = Modifier.fillMaxSize()) {
             
-            // 1. UNIFIED VIDEO PLAYER ON THE VERY TOP
-            val isBuffering by viewModel.exoPlayerManager.isBuffering.collectAsState()
-            val speed by viewModel.exoPlayerManager.playbackSpeed.collectAsState()
+            // 1. UNIFIED VIDEO PLAYERS
 
-            LaunchedEffect(activeUrl, activeYoutubeId) {
-                if (activeUrl.isNotEmpty() && activeYoutubeId.isEmpty()) {
-                    viewModel.exoPlayerManager.playStream(
-                        url = activeUrl,
-                        title = activeTitle,
-                        subtitle = "Islamic Stream",
-                        isVideo = true
-                    )
-                } else {
-                    viewModel.exoPlayerManager.getPlayerInstance().pause()
-                }
-            }
-
+            // (A) YouTube Video Player Dialog (Native)
             if (activeYoutubeId.isNotEmpty()) {
-                // Full Screen YouTube Player Dialog
                 androidx.compose.ui.window.Dialog(
                     onDismissRequest = { activeYoutubeId = "" },
                     properties = androidx.compose.ui.window.DialogProperties(
@@ -6078,17 +6140,23 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                         dismissOnClickOutside = false
                     )
                 ) {
-                    val localContext = androidx.compose.ui.platform.LocalContext.current
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(Color.Black)
                     ) {
-                        // Immersive WebView player spanning full screen
-                        YoutubePlayer(
-                            videoId = activeYoutubeId,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        if (!activeYoutubeId.startsWith("http")) {
+                            YoutubePlayer(
+                                videoId = activeYoutubeId,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            BrowserVideoPlayer(
+                                urlOrVideoId = activeYoutubeId,
+                                isYoutube = false,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
 
                         // Navigation header overlay - translucent and floating with rounded corners
                         Row(
@@ -6101,7 +6169,6 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Back Button
                             FilledIconButton(
                                 onClick = { activeYoutubeId = "" },
                                 colors = IconButtonDefaults.filledIconButtonColors(
@@ -6130,7 +6197,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = if (isBn) "সরাসরি ব্রাউজার প্লেয়ার • ফুল স্ক্রিন" else "Direct Player • Full Screen",
+                                    text = if (isBn) "ইউটিউব ভিডিও প্লেয়ার • ফুল স্ক্রিন" else "YouTube Player • Full Screen",
                                     color = SoftGoldBorder,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -6139,11 +6206,15 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                         }
                     }
                 }
-            } else if (activeUrl.isNotEmpty()) {
-                // Full Screen HLS/ExoPlayer Stream Dialog
+            }
+
+            // (B) Live Direct HLS/Exo Player Video Dialog (Media3 Native)
+            if (activeStreamUrl.isNotEmpty()) {
+                val isBuffering by viewModel.exoPlayerManager.isBuffering.collectAsState()
+                
                 androidx.compose.ui.window.Dialog(
                     onDismissRequest = { 
-                        activeUrl = ""
+                        activeStreamUrl = ""
                         viewModel.exoPlayerManager.stop()
                     },
                     properties = androidx.compose.ui.window.DialogProperties(
@@ -6206,7 +6277,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                             }
                         }
 
-                        // Navigation header overlay for HLS
+                        // Navigation header overlay - translucent and floating with rounded corners
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -6217,10 +6288,9 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Back Button
                             FilledIconButton(
                                 onClick = { 
-                                    activeUrl = "" 
+                                    activeStreamUrl = ""
                                     viewModel.exoPlayerManager.stop()
                                 },
                                 colors = IconButtonDefaults.filledIconButtonColors(
@@ -6249,40 +6319,11 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = if (isBn) "সরাসরি লাইভ টিভি • ফুল স্ক্রিন" else "Direct Live TV • Full Screen",
+                                    text = if (isBn) "সরাসরি লাইভ টিভি • এক্সো-প্লেয়ার" else "Live Stream • ExoPlayer Full Screen",
                                     color = SoftGoldBorder,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                            }
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            // Speed selection inside the top bar
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = if (isBn) "গতি:" else "Speed:",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SoftGoldBorder,
-                                    modifier = Modifier.padding(end = 4.dp)
-                                )
-                                listOf(1.0f, 1.25f, 1.5f, 2.0f).forEach { s ->
-                                    val isSelected = speed == s
-                                    Button(
-                                        onClick = { viewModel.exoPlayerManager.setSpeed(s) },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = if (isSelected) SoftGoldBorder else Color.Black.copy(alpha = 0.6f),
-                                            contentColor = if (isSelected) Color.Black else Color.White
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 6.dp),
-                                        modifier = Modifier
-                                            .height(26.dp)
-                                            .padding(end = 2.dp)
-                                    ) {
-                                        Text("${s}x", fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
                             }
                         }
                     }
@@ -6434,21 +6475,29 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
-                        items(targetVideos) { item ->
-                            val isCurrentSelection = if (item.youtubeId.isNotEmpty()) activeYoutubeId == item.youtubeId else activeUrl == item.videoUrl
+                        items(
+                            items = targetVideos,
+                            key = { it.id }
+                        ) { item ->
+                            val isCurrentSelection = if (item.youtubeId.isNotEmpty()) activeYoutubeId == item.youtubeId else activeStreamUrl == item.videoUrl
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
+                                        activeTitle = item.title
                                         if (item.youtubeId.isNotEmpty()) {
                                             activeYoutubeId = item.youtubeId
-                                            activeUrl = ""
-                                            viewModel.exoPlayerManager.getPlayerInstance().pause()
+                                            activeStreamUrl = ""
                                         } else {
-                                            activeUrl = item.videoUrl
+                                            activeStreamUrl = item.videoUrl
                                             activeYoutubeId = ""
+                                            viewModel.exoPlayerManager.playStream(
+                                                url = item.videoUrl,
+                                                title = item.title,
+                                                subtitle = if (isBn) "লাইভ সম্প্রচার" else "Live Stream",
+                                                isVideo = true
+                                            )
                                         }
-                                        activeTitle = item.title
                                     },
                                 colors = CardDefaults.cardColors(
                                     containerColor = if (isCurrentSelection) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.surface
@@ -6575,10 +6624,10 @@ private fun generateIslamicVideos(category: String, query: String, count: Int, i
     val queryClean = query.trim().lowercase()
     
     val thumbnails = listOf(
-        "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=400",
-        "https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&q=80&w=400",
+        "https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&q=80&w=400",
+        "https://images.unsplash.com/photo-1597935258735-e254c1839512?auto=format&fit=crop&q=80&w=400",
         "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&q=80&w=400",
-        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=400"
+        "https://images.unsplash.com/photo-1609599006353-e629f1d50218?auto=format&fit=crop&q=80&w=400"
     )
     
     val videoUrls = listOf(
@@ -10525,4 +10574,216 @@ fun getDeedCategoryIcon(iconName: String): androidx.compose.ui.graphics.vector.I
         else -> Icons.Default.Star
     }
 }
+
+@Composable
+fun OnboardingScreen(onFinished: () -> Unit, isBn: Boolean) {
+    var currentPage by remember { mutableStateOf(0) }
+    
+    val pages = remember {
+        listOf(
+            OnboardingPageData(
+                titleBn = "নামাজ ও ইবাদত",
+                titleEn = "Prayer & Worship",
+                descBn = "সরাসরি নামাজের সময়সূচী, কিবলা কম্পাস, ডিজিটাল তসবিহ এবং প্রতিদিনের ওয়াক্ত ও ফরজ নামাজ ট্র্যাকার।",
+                descEn = "Real-time accurate Prayer Times, Qibla direction, Digital Tasbih counter, and personalized Salat tracking records.",
+                imageUrl = "https://images.unsplash.com/photo-1597935258735-e254c1839512?q=80&w=1000" // Salat/Mosque
+            ),
+            OnboardingPageData(
+                titleBn = "আল-কুরআনুল কারীম",
+                titleEn = "The Holy Quran",
+                descBn = "বাংলা উচ্চারণ, অর্থ, তাফসীর ও স্পষ্ট অডিও তিলাওয়াতসহ সম্পূর্ণ আল-কুরআন শুনুন এবং পড়ুন।",
+                descEn = "Read, learn, and listen to the Holy Quran with phonetics, Bengali translation, script choices, and crystal clear audios.",
+                imageUrl = "https://images.unsplash.com/photo-1609599006353-e629e1d55139?q=80&w=1000" // Quran
+            ),
+            OnboardingPageData(
+                titleBn = "লাইভ টিভি ও রেডিও",
+                titleEn = "Live TV & Radio",
+                descBn = "মক্কা ও মদিনা লাইভ প্রচার, বিভিন্ন ইসলামিক টিভি চ্যানেল এবং সরাসরি জনপ্রিয় ইসলামিক রেডিও শুনুন।",
+                descEn = "Watch Holy Makkah & Madinah Live streams, Islamic TV channels, and listen to soul-enriching Islamic Radio broadcasts directly.",
+                imageUrl = "https://images.unsplash.com/photo-1564769050039-23113de55513?q=80&w=1000" // Kaaba/Makkah
+            ),
+            OnboardingPageData(
+                titleBn = "ওয়াজ ও ইসলামিক ভিডিও",
+                titleEn = "Waz & Islamic Video",
+                descBn = "জনপ্রিয় বক্তাদের চমৎকার সব ওয়াজ মাহফিল, কুরআন তিলাওয়াতের বঙ্গানুবাদ এবং সুন্দর ইসলামিক গজলের লাইব্রেরী।",
+                descEn = "Access professional waz mahfil collection, surah translations, and traditional audio-visual Islamic Nasheeds anytime.",
+                imageUrl = "https://images.unsplash.com/photo-1507593180207-a8d347dad40d?q=80&w=1000" // Grand Mosque Ceiling
+            ),
+            OnboardingPageData(
+                titleBn = "প্রতিদিনের দোআ ও আমল",
+                titleEn = "Daily Dua & Amal",
+                descBn = "প্রতিদিনের প্রয়োজনীয় সহীহ দুআ কালেকশন, উন্নত আমল ট্র্যাকার, হিসনুল মুসলিম ও সুন্দর ইসলামিক কুইজ।",
+                descEn = "Follow authentic daily Adhkar, track your habits/good deeds, browse Hisnul Muslim, and test your Islamic knowledge.",
+                imageUrl = "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?q=80&w=1000" // Warm light/Dua
+            )
+        )
+    }
+    
+    val page = pages[currentPage]
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        // Background Wallpaper image with crossfade
+        coil.compose.AsyncImage(
+            model = page.imageUrl,
+            contentDescription = page.titleEn,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+        )
+        
+        // Gradient dark overlay from bottom to top to guarantee readability
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.35f),
+                            Color.Black.copy(alpha = 0.5f),
+                            Color.Black.copy(alpha = 0.92f)
+                        )
+                    )
+                )
+        )
+        
+        // Skip Button position on very top-right
+        TextButton(
+            onClick = onFinished,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(top = 16.dp, end = 16.dp)
+                .testTag("onboarding_skip_button"),
+            colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = 0.85f))
+        ) {
+            Text(
+                text = if (isBn) "এড়িয়ে যান ➔" else "Skip ➔",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                style = androidx.compose.ui.text.TextStyle(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                        blurRadius = 2f
+                    )
+                )
+            )
+        }
+        
+        // Content container placed at bottom third
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 36.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Main Heading with Soft Accent Design
+            Text(
+                text = if (isBn) page.titleBn else page.titleEn,
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                style = androidx.compose.ui.text.TextStyle(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                        blurRadius = 4f
+                    )
+                ),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Description paragraph with dynamic translation overlay
+            Text(
+                text = if (isBn) page.descBn else page.descEn,
+                color = Color.White.copy(alpha = 0.88f),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                lineHeight = 21.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Three dot indicator layout
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 24.dp)
+            ) {
+                pages.forEachIndexed { index, _ ->
+                    val isActive = index == currentPage
+                    Box(
+                        modifier = Modifier
+                            .size(
+                                width = if (isActive) 24.dp else 8.dp,
+                                height = 8.dp
+                            )
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                if (isActive) SoftGoldBorder else Color.White.copy(alpha = 0.35f)
+                            )
+                    )
+                }
+            }
+            
+            // Primary Next Button
+            Button(
+                onClick = {
+                    if (currentPage < pages.lastIndex) {
+                        currentPage++
+                    } else {
+                        onFinished()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .testTag("onboarding_next_button"),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = if (currentPage == pages.lastIndex) {
+                            if (isBn) "অ্যাপসে প্রবেশ করুন" else "Get Started"
+                        } else {
+                            if (isBn) "পরবর্তী বিবরণ" else "Next Feature"
+                        },
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = if (currentPage == pages.lastIndex) Icons.Default.CheckCircle else Icons.Default.ArrowForward,
+                        contentDescription = "Next Action",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+data class OnboardingPageData(
+    val titleBn: String,
+    val titleEn: String,
+    val descBn: String,
+    val descEn: String,
+    val imageUrl: String
+)
 
