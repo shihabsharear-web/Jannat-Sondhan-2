@@ -1417,6 +1417,16 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
         }
         hostPref.apply()
         updateCityConfig(city)
+
+        // Broadcast update to the home screen widget
+        try {
+            val widgetUpdateIntent = android.content.Intent("com.example.action.PRAYER_WIDGET_REFRESH").apply {
+                component = android.content.ComponentName(context, "com.example.widget.PrayerAppWidgetProvider")
+            }
+            context.sendBroadcast(widgetUpdateIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun updateCityConfig(city: CityInfo) {
@@ -1462,16 +1472,21 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
                         val addressesBn = geocoderBn.getFromLocation(latitude, longitude, 1)
                         if (!addressesBn.isNullOrEmpty()) {
                             val address = addressesBn[0]
-                            val area = (address.subLocality ?: address.thoroughfare ?: address.featureName ?: "").trim()
-                            val district = (address.subAdminArea ?: address.locality ?: address.adminArea ?: "").trim()
-                            val country = (address.countryName ?: "").trim()
-                            
-                            val parts = mutableListOf<String>()
-                            if (area.isNotEmpty()) parts.add(area)
-                            if (district.isNotEmpty() && district != area) parts.add(district)
-                            if (country.isNotEmpty() && country != district && country != area) parts.add(country)
-                            if (parts.isNotEmpty()) {
-                                resolvedBn = parts.joinToString(", ")
+                            val fullAddress = address.getAddressLine(0) ?: ""
+                            val parts = fullAddress.split(",")
+                            val cleanParts = parts.map { it.trim() }.filter { it.isNotEmpty() && !it.any { ch -> ch.isDigit() } }
+                            resolvedBn = if (cleanParts.size >= 2) {
+                                cleanParts.take(2).joinToString(", ")
+                            } else {
+                                val subLoc = address.subLocality?.trim() ?: ""
+                                val loc = address.locality?.trim() ?: ""
+                                val admin = address.adminArea?.trim() ?: ""
+                                when {
+                                    subLoc.isNotEmpty() && loc.isNotEmpty() -> "$subLoc, $loc"
+                                    loc.isNotEmpty() && admin.isNotEmpty() -> "$loc, $admin"
+                                    loc.isNotEmpty() -> loc
+                                    else -> address.locality ?: "আমার অবস্থান"
+                                }
                             }
                         }
                     } catch (e: Exception) {
@@ -1485,16 +1500,21 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
                         val addressesEn = geocoderEn.getFromLocation(latitude, longitude, 1)
                         if (!addressesEn.isNullOrEmpty()) {
                             val address = addressesEn[0]
-                            val area = (address.subLocality ?: address.thoroughfare ?: address.featureName ?: "").trim()
-                            val district = (address.subAdminArea ?: address.locality ?: address.adminArea ?: "").trim()
-                            val country = (address.countryName ?: "").trim()
-                            
-                            val parts = mutableListOf<String>()
-                            if (area.isNotEmpty()) parts.add(area)
-                            if (district.isNotEmpty() && district != area) parts.add(district)
-                            if (country.isNotEmpty() && country != district && country != area) parts.add(country)
-                            if (parts.isNotEmpty()) {
-                                resolvedEn = parts.joinToString(", ")
+                            val fullAddress = address.getAddressLine(0) ?: ""
+                            val parts = fullAddress.split(",")
+                            val cleanParts = parts.map { it.trim() }.filter { it.isNotEmpty() && !it.any { ch -> ch.isDigit() } }
+                            resolvedEn = if (cleanParts.size >= 2) {
+                                cleanParts.take(2).joinToString(", ")
+                            } else {
+                                val subLoc = address.subLocality?.trim() ?: ""
+                                val loc = address.locality?.trim() ?: ""
+                                val admin = address.adminArea?.trim() ?: ""
+                                when {
+                                    subLoc.isNotEmpty() && loc.isNotEmpty() -> "$subLoc, $loc"
+                                    loc.isNotEmpty() && admin.isNotEmpty() -> "$loc, $admin"
+                                    loc.isNotEmpty() -> loc
+                                    else -> address.locality ?: "My Location"
+                                }
                             }
                         }
                     } catch (e: Exception) {

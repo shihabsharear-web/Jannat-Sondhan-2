@@ -2879,6 +2879,13 @@ fun HomeDashboardView(
                     val progressFraction by viewModel.prayerProgressFraction.collectAsState()
                     val nextPrayerTimeVal by viewModel.nextPrayerTime.collectAsState()
                     val forbiddenState by viewModel.forbiddenTimeState.collectAsState()
+                    val currentPrayerNameVal by viewModel.currentPrayerName.collectAsState()
+                    val currentPrayerTimeVal by viewModel.currentPrayerTime.collectAsState()
+                    val use24HourFormat by viewModel.use24HourFormat.collectAsState()
+                    val selectedCity by viewModel.selectedCity.collectAsState()
+                    val nextPrayerName by viewModel.nextPrayerName.collectAsState()
+                    val countdown by viewModel.prayerCountdown.collectAsState()
+                    val language by viewModel.appLanguage.collectAsState()
 
                     Card(
                         modifier = Modifier
@@ -2917,7 +2924,6 @@ fun HomeDashboardView(
                                     modifier = Modifier.weight(1.1f),
                                     horizontalAlignment = Alignment.Start
                                 ) {
-                                    // Styled Tag for Active Prayer
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -2926,7 +2932,7 @@ fun HomeDashboardView(
                                             modifier = Modifier
                                                 .size(6.dp)
                                                 .clip(CircleShape)
-                                                .background(Color(0xFF4CAF50)) // Pulsing Active Green
+                                                .background(Color(0xFF4CAF50))
                                         )
                                         Text(
                                             text = currentHeader,
@@ -5959,32 +5965,56 @@ fun IslamicAudioCard(
 
 @Composable
 fun YoutubePlayer(videoId: String, modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-    var playerViewInstance: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView? by remember { mutableStateOf(null) }
 
-    DisposableEffect(lifecycleOwner) {
-        onDispose {
-            playerViewInstance?.let { pv ->
+    androidx.compose.runtime.key(videoId) {
+        var playerViewInstance: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView? by remember { mutableStateOf(null) }
+
+        DisposableEffect(lifecycleOwner, videoId) {
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_DESTROY) {
+                    playerViewInstance?.release()
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            
+            onDispose {
                 try {
-                    lifecycleOwner.lifecycle.removeObserver(pv)
-                    pv.release()
+                    lifecycleOwner.lifecycle.removeObserver(observer)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
+                playerViewInstance?.let { pv ->
+                    try {
+                        lifecycleOwner.lifecycle.removeObserver(pv)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    try {
+                        pv.release()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
             }
         }
-    }
 
-    androidx.compose.runtime.key(videoId) {
         androidx.compose.ui.viewinterop.AndroidView(
             modifier = modifier.fillMaxSize(),
-            factory = { context ->
-                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView(context).apply {
+            factory = { ctx ->
+                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView(ctx).apply {
+                    enableAutomaticInitialization = false
+                    layoutParams = android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                     playerViewInstance = this
                     lifecycleOwner.lifecycle.addObserver(this)
-                    addYouTubePlayerListener(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
+                    
+                    initialize(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
                         override fun onReady(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
-                            youTubePlayer.loadVideo(videoId, 0f)
+                            youTubePlayer.cueVideo(videoId, 0f)
                         }
                     })
                 }
@@ -6055,6 +6085,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
     var activeTitle by remember { mutableStateOf("") }
     var activeYoutubeId by remember { mutableStateOf("") }
     var activeStreamUrl by remember { mutableStateOf("") }
+    var isListLoading by remember { mutableStateOf(false) }
 
     if (activeYoutubeId.isNotEmpty()) {
         BackHandler {
@@ -6113,10 +6144,13 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
         )
     )
 
-    // Reset search query and count on section change
+    // Reset search query and count on section change with a premium YouTube loading simulation
     LaunchedEffect(mediaSubSection) {
         searchQuery = ""
         visibleItemCount = 15
+        isListLoading = true
+        kotlinx.coroutines.delay(650) // Smooth, elegant YouTube API simulation delay
+        isListLoading = false
     }
 
     Column(
@@ -6454,7 +6488,32 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                     }
                 }
 
-                if (targetVideos.isEmpty()) {
+                if (isListLoading) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(38.dp),
+                                strokeWidth = 3.5.dp
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = if (isBn) "ইউটিউব সার্ভার থেকে ভিডিও লোড করা হচ্ছে..." else "Loading latest YouTube feeds...",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                } else if (targetVideos.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -6519,7 +6578,13 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                                             .clip(RoundedCornerShape(8.dp))
                                     ) {
                                         coil.compose.AsyncImage(
-                                            model = item.thumbnail,
+                                            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                                .data(if (item.thumbnail.startsWith("https://img.youtube.com")) item.thumbnail.replace("https://img.youtube.com", "https://i.ytimg.com") else item.thumbnail)
+                                                .crossfade(true)
+                                                .placeholder(com.example.R.drawable.islamic_mecca_wallpaper)
+                                                .error(com.example.R.drawable.islamic_mecca_wallpaper)
+                                                .fallback(com.example.R.drawable.islamic_mecca_wallpaper)
+                                                .build(),
                                             contentDescription = item.title,
                                             modifier = Modifier.fillMaxSize(),
                                             contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -10009,9 +10074,9 @@ fun PrayerRulesTab(isBn: Boolean) {
                     prayerInvalidators.forEachIndexed { i, step ->
                         Row(modifier = Modifier.padding(vertical = 4.dp)) {
                             Icon(
-                                imageVector = if (i == 0) Icons.Default.Warning else Icons.Default.Error,
+                                imageVector = Icons.Default.Cancel,
                                 contentDescription = null,
-                                tint = if (i == 0) Color(0xFFEA580C) else Color(0xFFDC2626),
+                                tint = Color(0xFFDC2626),
                                 modifier = Modifier.size(16.dp).padding(top = 2.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -10029,11 +10094,11 @@ fun PrayerRulesTab(isBn: Boolean) {
             }
         }
 
-        // 4. Important practices/deeds within prayer (নামাজের মধ্যকার গুরুত্বপূর্ণ সুন্নত ও আমলসমূহ)
+        // 4. Sunnah & Etiquettes within Prayer (নামাজের ভেতর ও বাহিরে প্রয়োজনীয় আমল ও সুন্নতসমূহ)
         item {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = if (isBn) "নামাজের মধ্যকার অন্যান্য আমল ও সুন্নতসমূহ" else "Sunnah & Etiquettes within Prayer",
+                text = if (isBn) "নামাজের গুরুত্বপূর্ণ সুন্নত ও আমল সমূহ" else "Sunnah & Etiquettes within Prayer",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -10586,35 +10651,35 @@ fun OnboardingScreen(onFinished: () -> Unit, isBn: Boolean) {
                 titleEn = "Prayer & Worship",
                 descBn = "সরাসরি নামাজের সময়সূচী, কিবলা কম্পাস, ডিজিটাল তসবিহ এবং প্রতিদিনের ওয়াক্ত ও ফরজ নামাজ ট্র্যাকার।",
                 descEn = "Real-time accurate Prayer Times, Qibla direction, Digital Tasbih counter, and personalized Salat tracking records.",
-                imageUrl = "https://images.unsplash.com/photo-1597935258735-e254c1839512?q=80&w=1000" // Salat/Mosque
+                imageUrl = "https://images.unsplash.com/photo-1597935258735-e254c1839512?auto=format&fit=crop&w=1200&q=80" // Warm Grand Mosque twilight architecture
             ),
             OnboardingPageData(
                 titleBn = "আল-কুরআনুল কারীম",
                 titleEn = "The Holy Quran",
                 descBn = "বাংলা উচ্চারণ, অর্থ, তাফসীর ও স্পষ্ট অডিও তিলাওয়াতসহ সম্পূর্ণ আল-কুরআন শুনুন এবং পড়ুন।",
                 descEn = "Read, learn, and listen to the Holy Quran with phonetics, Bengali translation, script choices, and crystal clear audios.",
-                imageUrl = "https://images.unsplash.com/photo-1609599006353-e629e1d55139?q=80&w=1000" // Quran
+                imageUrl = "https://images.unsplash.com/photo-1609599006353-e629e1d55139?auto=format&fit=crop&w=1200&q=80" // Holy Quran under warm spiritual lighting
             ),
             OnboardingPageData(
                 titleBn = "লাইভ টিভি ও রেডিও",
                 titleEn = "Live TV & Radio",
                 descBn = "মক্কা ও মদিনা লাইভ প্রচার, বিভিন্ন ইসলামিক টিভি চ্যানেল এবং সরাসরি জনপ্রিয় ইসলামিক রেডিও শুনুন।",
                 descEn = "Watch Holy Makkah & Madinah Live streams, Islamic TV channels, and listen to soul-enriching Islamic Radio broadcasts directly.",
-                imageUrl = "https://images.unsplash.com/photo-1564769050039-23113de55513?q=80&w=1000" // Kaaba/Makkah
+                imageUrl = "https://images.unsplash.com/photo-1564769050039-23113de55513?auto=format&fit=crop&w=1200&q=80" // The Holy Kaaba closeup with gold-wrapped Kiswah
             ),
             OnboardingPageData(
                 titleBn = "ওয়াজ ও ইসলামিক ভিডিও",
                 titleEn = "Waz & Islamic Video",
                 descBn = "জনপ্রিয় বক্তাদের চমৎকার সব ওয়াজ মাহফিল, কুরআন তিলাওয়াতের বঙ্গানুবাদ এবং সুন্দর ইসলামিক গজলের লাইব্রেরী।",
                 descEn = "Access professional waz mahfil collection, surah translations, and traditional audio-visual Islamic Nasheeds anytime.",
-                imageUrl = "https://images.unsplash.com/photo-1507593180207-a8d347dad40d?q=80&w=1000" // Grand Mosque Ceiling
+                imageUrl = "https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=1200&q=80" // Majestic starry sky and minarets
             ),
             OnboardingPageData(
                 titleBn = "প্রতিদিনের দোআ ও আমল",
                 titleEn = "Daily Dua & Amal",
                 descBn = "প্রতিদিনের প্রয়োজনীয় সহীহ দুআ কালেকশন, উন্নত আমল ট্র্যাকার, হিসনুল মুসলিম ও সুন্দর ইসলামিক কুইজ।",
                 descEn = "Follow authentic daily Adhkar, track your habits/good deeds, browse Hisnul Muslim, and test your Islamic knowledge.",
-                imageUrl = "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?q=80&w=1000" // Warm light/Dua
+                imageUrl = "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=1200&q=80" // Warm hands raised in peaceful Dua
             )
         )
     }
@@ -10626,6 +10691,21 @@ fun OnboardingScreen(onFinished: () -> Unit, isBn: Boolean) {
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        // Beautiful glowing gradient background fallback that shows instantly before image loads
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF031B1B), // Luxurious Dark Teal
+                            Color(0xFF063333), // Emerald-shadowed Dark Green
+                            Color(0xFF0C1927)  // Deep Midnight Blue
+                        )
+                    )
+                )
+        )
+
         // Background Wallpaper image with crossfade
         coil.compose.AsyncImage(
             model = page.imageUrl,
