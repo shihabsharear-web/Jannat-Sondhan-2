@@ -46,6 +46,43 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/ibadah_prayer_widget_info" />
         </receiver>
+
+        <receiver
+            android:name=".widget.DetailedPrayerAppWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.action.DETAILED_PRAYER_WIDGET_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ibadah_detailed_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.IbadahDashboardWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.action.IBADAH_DASHBOARD_WIDGET_REFRESH" />
+                <action android:name="com.example.action.TOGGLE_DEED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ibadah_dashboard_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.IbadahCurrentPrayerWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.action.CURRENT_PRAYER_WIDGET_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/ibadah_current_prayer_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

@@ -1,0 +1,435 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/dashboard_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_shape"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Header Section (App logo/name on left, Bengali Date on right) -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="জান্নাত সন্ধান"
+                android:textColor="#D4AF37"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="দৈনিক আমল ড্যাশবোর্ড"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_date_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/widget_sub_card_bg"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
+            android:text="১১ জুন, ২০২৬"
+            android:textColor="#FFFFFF"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+
+    <!-- Progress Card Panel -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_sub_card_bg"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:layout_marginBottom="8dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:text="আজকের অগ্রগতি:"
+                android:textColor="#81C784"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_progress_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:text="০/৮ সম্পন্ন (০%)"
+                android:textColor="#D4AF37"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </RelativeLayout>
+
+        <ProgressBar
+            android:id="@+id/widget_progress_bar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:max="8"
+            android:progress="0"
+            android:progressTint="#D4AF37"
+            android:progressBackgroundTint="#40FFFFFF" />
+    </LinearLayout>
+
+    <!-- Checklist rows of 8 Deeds (Compact for Widget) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- Row 1 -->
+        <LinearLayout
+            android:id="@+id/deed_row_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/widget_sub_card_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="4dp">
+
+            <TextView
+                android:id="@+id/deed_check_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="6dp"
+                android:text="⚪"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/deed_title_1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="৫ ওয়াক্ত ফরজ সালাত আদায়"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/deed_cat_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="সালাত"
+                android:textColor="#81C784"
+                android:textSize="8sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Row 2 -->
+        <LinearLayout
+            android:id="@+id/deed_row_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/widget_sub_card_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="4dp">
+
+            <TextView
+                android:id="@+id/deed_check_2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="6dp"
+                android:text="⚪"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/deed_title_2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="তাহাজ্জুদ ও কিয়ামুল লাইল"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/deed_cat_2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="সালাত"
+                android:textColor="#81C784"
+                android:textSize="8sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Row 3 -->
+        <LinearLayout
+            android:id="@+id/deed_row_3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/widget_sub_card_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="4dp">
+
+            <TextView
+                android:id="@+id/deed_check_3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="6dp"
+                android:text="⚪"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/deed_title_3"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="আল-কুরআন তিলাওয়াত ও অর্থ"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/deed_cat_3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="কুরআন"
+                android:textColor="#81C784"
+                android:textSize="8sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Row 4 -->
+        <LinearLayout
+            android:id="@+id/deed_row_4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/widget_sub_card_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="4dp">
+
+            <TextView
+                android:id="@+id/deed_check_4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="6dp"
+                android:text="⚪"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/deed_title_4"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="সকাল-সন্ধ্যার মাসনুন জিকির ও দোয়া"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/deed_cat_4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="জিকির"
+                android:textColor="#81C784"
+                android:textSize="8sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Row 5 -->
+        <LinearLayout
+            android:id="@+id/deed_row_5"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/widget_sub_card_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="4dp">
+
+            <TextView
+                android:id="@+id/deed_check_5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="6dp"
+                android:text="⚪"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/deed_title_5"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="১০০ বার ইস্তিগফার (ক্ষমাপ্রার্থনা)"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/deed_cat_5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="জিকির"
+                android:textColor="#81C784"
+                android:textSize="8sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Row 6 -->
+        <LinearLayout
+            android:id="@+id/deed_row_6"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/widget_sub_card_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="4dp">
+
+            <TextView
+                android:id="@+id/deed_check_6"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="6dp"
+                android:text="⚪"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/deed_title_6"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="১২ রাকাত সুন্নতে মুয়াক্কাদা আদায়"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/deed_cat_6"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="সালাত"
+                android:textColor="#81C784"
+                android:textSize="8sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Row 7 -->
+        <LinearLayout
+            android:id="@+id/deed_row_7"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/widget_sub_card_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="4dp">
+
+            <TextView
+                android:id="@+id/deed_check_7"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="6dp"
+                android:text="⚪"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/deed_title_7"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="দান-সদকা বা ভালো কাজ"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/deed_cat_7"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="সদকা"
+                android:textColor="#81C784"
+                android:textSize="8sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Row 8 -->
+        <LinearLayout
+            android:id="@+id/deed_row_8"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_sub_card_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="4dp">
+
+            <TextView
+                android:id="@+id/deed_check_8"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="6dp"
+                android:text="⚪"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/deed_title_8"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="পরিবার ও পিতা-মাতার সদ্ব্যবহার"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/deed_cat_8"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="সদকা"
+                android:textColor="#81C784"
+                android:textSize="8sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

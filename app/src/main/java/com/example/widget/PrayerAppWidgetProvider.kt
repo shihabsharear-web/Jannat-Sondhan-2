@@ -9,7 +9,6 @@ import android.widget.RemoteViews
 import com.example.R
 import java.util.Calendar
 import java.util.Locale
-import java.text.SimpleDateFormat
 
 class PrayerAppWidgetProvider : AppWidgetProvider() {
 
@@ -17,11 +16,11 @@ class PrayerAppWidgetProvider : AppWidgetProvider() {
         for (appWidgetId in appWidgetIds) {
             updateAppWidget(context, appWidgetManager, appWidgetId)
         }
+        scheduleNextUpdate(context)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        // If we receive a custom update action or standard check
         if (intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE || 
             intent.action == "com.example.action.PRAYER_WIDGET_REFRESH") {
             val appWidgetManager = AppWidgetManager.getInstance(context)
@@ -31,7 +30,65 @@ class PrayerAppWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        scheduleNextUpdate(context)
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+            if (alarmManager != null) {
+                val intent = Intent(context, PrayerAppWidgetProvider::class.java).apply {
+                    action = "com.example.action.PRAYER_WIDGET_REFRESH"
+                }
+                val pendingIntent = android.app.PendingIntent.getBroadcast(
+                    context, 1001, intent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                alarmManager.cancel(pendingIntent)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     companion object {
+        private fun scheduleNextUpdate(context: Context) {
+            try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager ?: return
+                val intent = Intent(context, PrayerAppWidgetProvider::class.java).apply {
+                    action = "com.example.action.PRAYER_WIDGET_REFRESH"
+                }
+                val pendingIntent = android.app.PendingIntent.getBroadcast(
+                    context, 1001, intent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                
+                val calendar = Calendar.getInstance()
+                calendar.add(Calendar.MINUTE, 1)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        android.app.AlarmManager.RTC, // No WAKE_UP: extremely battery and resource optimized!
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.set(
+                        android.app.AlarmManager.RTC,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         private fun toBengaliDigits(input: String): String {
             val bDigits = charArrayOf('০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯')
             val eDigits = charArrayOf('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
@@ -44,20 +101,89 @@ class PrayerAppWidgetProvider : AppWidgetProvider() {
             return result
         }
 
-        private fun formatTo12Hour(time24: String): String {
+        private fun formatWaqtTime(time24: String, use24h: Boolean): String {
+            if (use24h) {
+                return toBengaliDigits(time24)
+            }
             return try {
                 val parts = time24.split(":")
-                val h = parts[0].toInt()
-                val m = parts[1].toInt()
-                val ampm = if (h >= 12) "PM" else "AM"
-                val h12 = if (h % 12 == 0) 12 else h % 12
-                String.format("%02d:%02d %s", h12, m, ampm)
+                var hr = parts[0].trim().toInt()
+                val min = parts[1].trim().toInt()
+                val isPm = hr >= 12
+                if (hr > 12) hr -= 12
+                if (hr == 0) hr = 12
+                val suffix = if (isPm) " পি" else " এ" // Compact spacing for widgets
+                toBengaliDigits(String.format("%02d:%02d", hr, min) + suffix)
             } catch (e: Exception) {
-                time24
+                toBengaliDigits(time24)
             }
         }
 
-        // Static fallback cities matching the app Exactly
+        private fun formatRemainingText(mins: Int): String {
+            if (mins <= 0) return "০ মিনিট"
+            val h = mins / 60
+            val m = mins % 60
+            return if (h > 0) {
+                "${h} ঘণ্টা ${m} মিনিট"
+            } else {
+                "${m} মিনিট"
+            }
+        }
+
+        private fun getUpcomingForbiddenText(
+            currentMins: Int,
+            fajrParts: List<String>,
+            dhuhrMins: Int,
+            sunsetMins: Int,
+            use24h: Boolean
+        ): Pair<String, String> {
+            try {
+                val sunriseHour = (fajrParts[0].toInt() + 1)
+                val sunriseMin = (fajrParts[1].toInt() + 20) % 60
+                val sunriseMins = sunriseHour * 60 + sunriseMin
+                val sunriseEndMins = sunriseMins + 15
+
+                val zawalStartMins = dhuhrMins - 10
+                val sunsetForbiddenStartMins = sunsetMins - 15
+
+                val sunriseStartStr = String.format("%02d:%02d", sunriseHour, sunriseMin)
+                val sunriseEndStr = String.format("%02d:%02d", sunriseEndMins / 60, sunriseEndMins % 60)
+
+                val zawalStartStr = String.format("%02d:%02d", zawalStartMins / 60, zawalStartMins % 60)
+                val dhuhrStr = String.format("%02d:%02d", dhuhrMins / 60, dhuhrMins % 60)
+
+                val sunsetStartStr = String.format("%02d:%02d", sunsetForbiddenStartMins / 60, sunsetForbiddenStartMins % 60)
+                val sunsetStr = String.format("%02d:%02d", sunsetMins / 60, sunsetMins % 60)
+
+                return when {
+                    currentMins in sunriseMins until sunriseEndMins -> {
+                        Pair("চলমান সূর্যোদয়", formatWaqtTime(sunriseEndStr, use24h))
+                    }
+                    currentMins in zawalStartMins until dhuhrMins -> {
+                        Pair("চলমান দ্বিপ্রহর", formatWaqtTime(dhuhrStr, use24h))
+                    }
+                    currentMins in sunsetForbiddenStartMins until sunsetMins -> {
+                        Pair("চলমান সূর্যাস্ত", formatWaqtTime(sunsetStr, use24h))
+                    }
+                    currentMins < sunriseMins || currentMins >= sunsetMins -> {
+                        val range = "${formatWaqtTime(sunriseStartStr, use24h)}-${formatWaqtTime(sunriseEndStr, use24h)}"
+                        Pair("আসন্ন সূর্যোদয়", range)
+                    }
+                    currentMins in sunriseEndMins until zawalStartMins -> {
+                        val range = "${formatWaqtTime(zawalStartStr, use24h)}-${formatWaqtTime(dhuhrStr, use24h)}"
+                        Pair("আসন্ন দ্বিপ্রহর", range)
+                    }
+                    else -> {
+                        val range = "${formatWaqtTime(sunsetStartStr, use24h)}-${formatWaqtTime(sunsetStr, use24h)}"
+                        Pair("আসন্ন সূর্যাস্ত", range)
+                    }
+                }
+            } catch (e: Exception) {
+                return Pair("আসন্ন নিষিদ্ধ", "--:--")
+            }
+        }
+
+        // Static fallback cities matching the app exactly
         data class CityInfoBase(
             val nameBn: String,
             val nameEn: String,
@@ -83,7 +209,6 @@ class PrayerAppWidgetProvider : AppWidgetProvider() {
             val isCustom = prefs.getBoolean("is_custom_location", false)
             if (isCustom) {
                 val nameBn = prefs.getString("custom_name_bn", "ঢাকা") ?: "ঢাকা"
-                // Clean the suffix " , বাংলাদেশ" if any to keep widget titles compact
                 val cleanBn = nameBn.replace(", বাংলাদেশ", "").replace("বাংলাদেশ", "").trim()
                 val nameEn = prefs.getString("custom_name_en", "Dhaka") ?: "Dhaka"
                 val sahri = prefs.getString("custom_sahri", "03:55") ?: "03:55"
@@ -103,142 +228,193 @@ class PrayerAppWidgetProvider : AppWidgetProvider() {
         }
 
         fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
-            val city = getSelectedCity(context)
-            val views = RemoteViews(context.packageName, R.layout.ibadah_prayer_widget)
+            try {
+                val city = getSelectedCity(context)
+                val prefs = context.getSharedPreferences("jannat_deeds_prefs", Context.MODE_PRIVATE)
+                val use24HourFormat = prefs.getBoolean("use_24h_format", false)
 
-            // 1. Set City Name In Left Corner
-            val displayLabel = "জান্নাতর সন্ধান • " + city.nameBn
-            views.setTextViewText(R.id.widget_title, displayLabel)
+                val views = RemoteViews(context.packageName, R.layout.ibadah_prayer_widget)
 
-            // 2. Calculations for Sunrise / Sunset
-            val calNow = Calendar.getInstance()
-            val currentMins = calNow.get(Calendar.HOUR_OF_DAY) * 60 + calNow.get(Calendar.MINUTE)
+                // 1. Set City Name In Left Corner
+                val displayLabel = "জান্নাত সন্ধান • " + city.nameBn
+                views.setTextViewText(R.id.widget_title, displayLabel)
 
-            // Setup Sunrise
-            val fajrParts = city.fajrTime.split(":")
-            val sunriseHour = (fajrParts[0].toInt() + 1)
-            val sunriseMin = (fajrParts[1].toInt() + 20) % 60
-            val sunriseStr = String.format("%02d:%02d", sunriseHour, sunriseMin)
-            val sunriseMins = sunriseHour * 60 + sunriseMin
+                // 2. Parsed times & setup calculations
+                val calNow = Calendar.getInstance()
+                val currentMins = calNow.get(Calendar.HOUR_OF_DAY) * 60 + calNow.get(Calendar.MINUTE)
 
-            // Setup Sunset
-            val sunsetStr = city.maghribTime
-            val sunsetParts = sunsetStr.split(":")
-            val sunsetMins = if (sunsetParts.size == 2) sunsetParts[0].toInt() * 60 + sunsetParts[1].toInt() else 1110
+                val fajrParts = city.fajrTime.split(":")
+                val fajrMins = if (fajrParts.size == 2) fajrParts[0].toInt() * 60 + fajrParts[1].toInt() else 240
 
-            // sequential cycle "একটা শেষ হলে আরেকটা এখানে থাকবে"
-            val isPastSunset = currentMins >= sunsetMins
-            val isBeforeSunrise = currentMins < sunriseMins
-            val showSunriseCorner = isBeforeSunrise || isPastSunset
+                val dhuhrParts = city.dhuhrTime.split(":")
+                val dhuhrMins = if (dhuhrParts.size == 2) dhuhrParts[0].toInt() * 60 + dhuhrParts[1].toInt() else 720
 
-            if (showSunriseCorner) {
-                views.setTextViewText(R.id.widget_cycle_label, "সূর্যোদয়")
-                views.setTextViewText(R.id.widget_cycle_time, toBengaliDigits(formatTo12Hour(sunriseStr)))
-            } else {
-                views.setTextViewText(R.id.widget_cycle_label, "সূর্যাস্ত")
-                views.setTextViewText(R.id.widget_cycle_time, toBengaliDigits(formatTo12Hour(sunsetStr)))
-            }
+                val asrParts = city.asrTime.split(":")
+                val asrMins = if (asrParts.size == 2) asrParts[0].toInt() * 60 + asrParts[1].toInt() else 945
 
-            // 3. Set standard five waqt timings
-            views.setTextViewText(R.id.fajr_time, toBengaliDigits(city.fajrTime))
-            views.setTextViewText(R.id.dhuhr_time, toBengaliDigits(city.dhuhrTime))
-            views.setTextViewText(R.id.asr_time, toBengaliDigits(city.asrTime))
-            views.setTextViewText(R.id.maghrib_time, toBengaliDigits(city.maghribTime))
-            views.setTextViewText(R.id.isha_time, toBengaliDigits(city.ishaTime))
+                val sunsetParts = city.maghribTime.split(":")
+                val sunsetMins = if (sunsetParts.size == 2) sunsetParts[0].toInt() * 60 + sunsetParts[1].toInt() else 1110
 
-            // Highlight current active Waqt
-            // Parse all timings to compute current active block
-            val dhuhrParts = city.dhuhrTime.split(":")
-            val dhuhrMins = if (dhuhrParts.size == 2) dhuhrParts[0].toInt() * 60 + dhuhrParts[1].toInt() else 720
+                val ishaParts = city.ishaTime.split(":")
+                val ishaMins = if (ishaParts.size == 2) ishaParts[0].toInt() * 60 + ishaParts[1].toInt() else 1200
 
-            val asrParts = city.asrTime.split(":")
-            val asrMins = if (asrParts.size == 2) asrParts[0].toInt() * 60 + asrParts[1].toInt() else 945
+                // Sunrise Forbidden Details
+                val sunriseHour = (fajrParts[0].toInt() + 1)
+                val sunriseMin = (fajrParts[1].toInt() + 20) % 60
+                val sunriseStr = String.format("%02d:%02d", sunriseHour, sunriseMin)
+                val sunriseMins = sunriseHour * 60 + sunriseMin
+                val sunriseEndMins = sunriseMins + 15
 
-            val ishaParts = city.ishaTime.split(":")
-            val ishaMins = if (ishaParts.size == 2) ishaParts[0].toInt() * 60 + ishaParts[1].toInt() else 1200
+                // Forbidden thresholds
+                val zawalStartMins = dhuhrMins - 10
+                val sunsetForbiddenStartMins = sunsetMins - 15
 
-            val fajrMins = if (fajrParts.size == 2) fajrParts[0].toInt() * 60 + fajrParts[1].toInt() else 260
+                // 3. Sequential cycle of Sunrise vs Sunset display in the top right box
+                val isPastSunset = currentMins >= sunsetMins
+                val isBeforeSunrise = currentMins < sunriseMins
+                val showSunriseCorner = isBeforeSunrise || isPastSunset
 
-            var currentActiveWaqt = "ফজর"
-            val isFajr = currentMins in fajrMins until dhuhrMins
-            val isDhuhr = currentMins in dhuhrMins until asrMins
-            val isAsr = currentMins in asrMins until sunsetMins
-            val isMaghrib = currentMins in sunsetMins until ishaMins
-            val isIsha = currentMins >= ishaMins || currentMins < fajrMins
-
-            // Reset backgrounds and highlighting
-            views.setInt(R.id.widget_waqt_fajr, "setBackgroundResource", R.drawable.widget_sub_card_bg)
-            views.setInt(R.id.widget_waqt_dhuhr, "setBackgroundResource", R.drawable.widget_sub_card_bg)
-            views.setInt(R.id.widget_waqt_asr, "setBackgroundResource", R.drawable.widget_sub_card_bg)
-            views.setInt(R.id.widget_waqt_maghrib, "setBackgroundResource", R.drawable.widget_sub_card_bg)
-            views.setInt(R.id.widget_waqt_isha, "setBackgroundResource", R.drawable.widget_sub_card_bg)
-
-            when {
-                isFajr -> {
-                    views.setInt(R.id.widget_waqt_fajr, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
-                    currentActiveWaqt = "ফজর"
+                if (showSunriseCorner) {
+                    views.setTextViewText(R.id.widget_cycle_label, "সূর্যোদয়")
+                    views.setTextViewText(R.id.widget_cycle_time, formatWaqtTime(sunriseStr, use24HourFormat))
+                } else {
+                    views.setTextViewText(R.id.widget_cycle_label, "সূর্যাস্ত")
+                    views.setTextViewText(R.id.widget_cycle_time, formatWaqtTime(city.maghribTime, use24HourFormat))
                 }
-                isDhuhr -> {
-                    views.setInt(R.id.widget_waqt_dhuhr, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
-                    currentActiveWaqt = "যোহর"
+
+                // 4. Set standard five waqt timings obeying user settings
+                views.setTextViewText(R.id.fajr_time, formatWaqtTime(city.fajrTime, use24HourFormat))
+                views.setTextViewText(R.id.dhuhr_time, formatWaqtTime(city.dhuhrTime, use24HourFormat))
+                views.setTextViewText(R.id.asr_time, formatWaqtTime(city.asrTime, use24HourFormat))
+                views.setTextViewText(R.id.maghrib_time, formatWaqtTime(city.maghribTime, use24HourFormat))
+                views.setTextViewText(R.id.isha_time, formatWaqtTime(city.ishaTime, use24HourFormat))
+
+                // 5. Compute countdown intervals & detect forbidden state
+                var countdownTitleValue = "⏳ পরবর্তী ওয়াক্তের বাকি সময়:"
+                var countdownDetailsValue = ""
+                var isForbiddenActive = false
+                var activeWaqt = "ফজর"
+
+                when {
+                    currentMins in fajrMins until sunriseMins -> {
+                        activeWaqt = "ফজর"
+                        val diff = sunriseMins - currentMins
+                        countdownTitleValue = "⏳ ফজর ওয়াক্তের বাকি সময়:"
+                        countdownDetailsValue = formatRemainingText(diff)
+                    }
+                    currentMins in sunriseMins until sunriseEndMins -> {
+                        activeWaqt = "সূর্যোদয়"
+                        isForbiddenActive = true
+                        val diff = sunriseEndMins - currentMins
+                        countdownTitleValue = "⚠️ নিষিদ্ধ সূর্যোদয় শেষ হতে:"
+                        countdownDetailsValue = formatRemainingText(diff)
+                    }
+                    currentMins in sunriseEndMins until zawalStartMins -> {
+                        activeWaqt = "ইশরাক/চাশত"
+                        val diff = dhuhrMins - currentMins
+                        countdownTitleValue = "⏳ যোহর ওয়াক্ত শুরু হতে:"
+                        countdownDetailsValue = formatRemainingText(diff)
+                    }
+                    currentMins in zawalStartMins until dhuhrMins -> {
+                        activeWaqt = "দ্বিপ্রহর"
+                        isForbiddenActive = true
+                        val diff = dhuhrMins - currentMins
+                        countdownTitleValue = "⚠️ নিষিদ্ধ দ্বিপ্রহর শেষ হতে:"
+                        countdownDetailsValue = formatRemainingText(diff)
+                    }
+                    currentMins in dhuhrMins until asrMins -> {
+                        activeWaqt = "যোহর"
+                        val diff = asrMins - currentMins
+                        countdownTitleValue = "⏳ যোহর ওয়াক্তের বাকি সময়:"
+                        countdownDetailsValue = formatRemainingText(diff)
+                    }
+                    currentMins in asrMins until sunsetForbiddenStartMins -> {
+                        activeWaqt = "আসর"
+                        val diff = sunsetForbiddenStartMins - currentMins
+                        countdownTitleValue = "⏳ আসর ওয়াক্তের বাকি সময়:"
+                        countdownDetailsValue = formatRemainingText(diff)
+                    }
+                    currentMins in sunsetForbiddenStartMins until sunsetMins -> {
+                        activeWaqt = "সূর্যাস্ত"
+                        isForbiddenActive = true
+                        val diff = sunsetMins - currentMins
+                        countdownTitleValue = "⚠️ নিষিদ্ধ সূর্যাস্ত শেষ হতে:"
+                        countdownDetailsValue = formatRemainingText(diff)
+                    }
+                    currentMins in sunsetMins until ishaMins -> {
+                        activeWaqt = "মাগরিব"
+                        val diff = ishaMins - currentMins
+                        countdownTitleValue = "⏳ মাগরিব ওয়াক্তের বাকি সময়:"
+                        countdownDetailsValue = formatRemainingText(diff)
+                    }
+                    else -> {
+                        activeWaqt = "এশা"
+                        val diff = if (currentMins >= ishaMins) {
+                            (24 * 60 - currentMins) + fajrMins
+                        } else {
+                            fajrMins - currentMins
+                        }
+                        countdownTitleValue = "⏳ এশা ওয়াক্তের বাকি সময়:"
+                        countdownDetailsValue = formatRemainingText(diff)
+                    }
                 }
-                isAsr -> {
-                    views.setInt(R.id.widget_waqt_asr, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
-                    currentActiveWaqt = "আসর"
+
+                // Apply current active waqt card highlight
+                views.setInt(R.id.widget_waqt_fajr, "setBackgroundResource", R.drawable.widget_sub_card_bg)
+                views.setInt(R.id.widget_waqt_dhuhr, "setBackgroundResource", R.drawable.widget_sub_card_bg)
+                views.setInt(R.id.widget_waqt_asr, "setBackgroundResource", R.drawable.widget_sub_card_bg)
+                views.setInt(R.id.widget_waqt_maghrib, "setBackgroundResource", R.drawable.widget_sub_card_bg)
+                views.setInt(R.id.widget_waqt_isha, "setBackgroundResource", R.drawable.widget_sub_card_bg)
+
+                when (activeWaqt) {
+                    "ফজর" -> views.setInt(R.id.widget_waqt_fajr, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
+                    "যোহর" -> views.setInt(R.id.widget_waqt_dhuhr, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
+                    "আসর" -> views.setInt(R.id.widget_waqt_asr, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
+                    "মাগরিব" -> views.setInt(R.id.widget_waqt_maghrib, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
+                    "এশা" -> views.setInt(R.id.widget_waqt_isha, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
                 }
-                isMaghrib -> {
-                    views.setInt(R.id.widget_waqt_maghrib, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
-                    currentActiveWaqt = "মাগরিব"
-                }
-                isIsha -> {
-                    views.setInt(R.id.widget_waqt_isha, "setBackgroundResource", R.drawable.widget_sub_card_bg_active)
-                    currentActiveWaqt = "এশা"
-                }
-            }
 
-            // 4. Forbidden Times calculation
-            // Sunrise window: sunrise - (sunrise + 15 mins)
-            val isSunriseForbidden = currentMins >= sunriseMins && currentMins < (sunriseMins + 15)
-            // Zawal window: (dhuhr - 10) - dhuhr
-            val isZawalForbidden = currentMins >= (dhuhrMins - 10) && currentMins < dhuhrMins
-            // Sunset window: (sunset - 15) - sunset
-            val isSunsetForbidden = currentMins >= (sunsetMins - 15) && currentMins < sunsetMins
+                // Apply text outputs
+                views.setTextViewText(R.id.widget_countdown_title, countdownTitleValue)
+                views.setTextViewText(R.id.widget_countdown_value, toBengaliDigits(countdownDetailsValue))
 
-            val isAnyForbiddenActive = isSunriseForbidden || isZawalForbidden || isSunsetForbidden
-
-            if (isAnyForbiddenActive) {
-                views.setTextViewText(R.id.widget_status_sub, "⚠️ নামাজ আদায় নিষিদ্ধ!")
-                views.setTextColor(R.id.widget_status_sub, 0xFFFF5252.toInt())
-            } else {
-                views.setTextViewText(R.id.widget_status_sub, "পবিত্র $currentActiveWaqt ওয়াক্ত চলমান")
-                views.setTextColor(R.id.widget_status_sub, 0xFF81C784.toInt())
-            }
-
-            // Set Forbidden Details content
-            val fSunStart = sunriseStr
-            val fSunEnd = String.format("%02d:%02d", sunriseHour, (sunriseMin + 15) % 60)
-            val fZawStart = String.format("%02d:%02d", if (dhuhrParts[1].toInt() >= 10) dhuhrParts[0].toInt() else (dhuhrParts[0].toInt() - 1 + 24) % 24, (dhuhrParts[1].toInt() - 10 + 60) % 60)
-            val fZawEnd = city.dhuhrTime
-            val fSetStart = String.format("%02d:%02d", if (sunsetParts[1].toInt() >= 15) sunsetParts[0].toInt() else (sunsetParts[0].toInt() - 1 + 24) % 24, (sunsetParts[1].toInt() - 15 + 60) % 60)
-            val fSetEnd = city.maghribTime
-
-            val dispFForbidden = String.format(
-                "সূর্যোদয়: %s-%s  |  দ্বিপ্রহর: %s-%s  |  সূর্যাস্ত: %s-%s",
-                fSunStart, fSunEnd, fZawStart, fZawEnd, fSetStart, fSetEnd
-            )
-            views.setTextViewText(R.id.widget_forbidden_details, toBengaliDigits(dispFForbidden))
-
-            // Single click intent: launches the main app activity
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            if (launchIntent != null) {
-                val pendingIntent = android.app.PendingIntent.getActivity(
-                    context, 0, launchIntent, 
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                // Calculate and apply upcoming/current forbidden details
+                val (upcomingLabel, upcomingRange) = getUpcomingForbiddenText(
+                    currentMins = currentMins,
+                    fajrParts = fajrParts,
+                    dhuhrMins = dhuhrMins,
+                    sunsetMins = sunsetMins,
+                    use24h = use24HourFormat
                 )
-                views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
-            }
+                views.setTextViewText(R.id.widget_upcoming_label, upcomingLabel)
+                views.setTextViewText(R.id.widget_upcoming_forbidden, toBengaliDigits(upcomingRange))
 
-            appWidgetManager.updateAppWidget(appWidgetId, views)
+                if (isForbiddenActive) {
+                    views.setTextViewText(R.id.widget_status_sub, "⚠️ নামাজ আদায় নিষিদ্ধ!")
+                    views.setTextColor(R.id.widget_status_sub, 0xFFFF5252.toInt())
+                    views.setInt(R.id.widget_forbidden_banner_box, "setBackgroundResource", R.drawable.widget_forbidden_bg)
+                    views.setTextColor(R.id.widget_countdown_title, 0xFFFF8A80.toInt())
+                } else {
+                    views.setTextViewText(R.id.widget_status_sub, "পবিত্র $activeWaqt ওয়াক্ত চলমান")
+                    views.setTextColor(R.id.widget_status_sub, 0xFF81C784.toInt())
+                    views.setInt(R.id.widget_forbidden_banner_box, "setBackgroundResource", R.drawable.widget_sub_card_bg)
+                    views.setTextColor(R.id.widget_countdown_title, 0xFFD4AF37.toInt())
+                }
+
+                // Single click intent: launches the main app activity
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                if (launchIntent != null) {
+                    val pendingIntent = android.app.PendingIntent.getActivity(
+                        context, 0, launchIntent, 
+                        android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                    )
+                    views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                }
+
+                appWidgetManager.updateAppWidget(appWidgetId, views)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }

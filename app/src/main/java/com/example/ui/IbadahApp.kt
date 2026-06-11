@@ -333,7 +333,8 @@ fun IbadahApp(viewModel: IbadahViewModel) {
     val currentClockTime by viewModel.currentClockTime.collectAsState()
     val isBn = language == AppLanguage.BN
 
-    var showOnboarding by remember { mutableStateOf(true) }
+    val hasSeenOnboarding by viewModel.hasSeenOnboarding.collectAsState()
+    val showOnboarding = !hasSeenOnboarding
     var selectedTab by remember { mutableStateOf(0) } // 0: Home/Prayer, 1: Schedule, 2: Quran, 3: Compass & Dhikr, 4: Tools & Ramadan, 5: Live & AI, 6: Settings / Notice
     var homeSubView by remember { mutableStateOf("dashboard") }
 
@@ -381,6 +382,25 @@ fun IbadahApp(viewModel: IbadahViewModel) {
             if (!hasNotificationPermission) {
                 notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+    }
+
+    val currentDeedDate by viewModel.deedSelectedDate.collectAsState()
+    androidx.compose.runtime.DisposableEffect(context, currentDeedDate) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
+                viewModel.loadDeedsForDate(currentDeedDate)
+                viewModel.loadMonthTrackerSummary()
+            }
+        }
+        val filter = android.content.IntentFilter("com.example.action.IBADAH_DEEDS_DATA_CHANGED")
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
+        onDispose {
+            context.unregisterReceiver(receiver)
         }
     }
 
@@ -446,7 +466,7 @@ fun IbadahApp(viewModel: IbadahViewModel) {
     MyApplicationTheme(darkTheme = isDark) {
         if (showOnboarding) {
             OnboardingScreen(
-                onFinished = { showOnboarding = false },
+                onFinished = { viewModel.setHasSeenOnboarding(true) },
                 isBn = isBn
             )
         } else {
@@ -5969,123 +5989,133 @@ fun YoutubePlayer(videoId: String, modifier: Modifier = Modifier) {
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
 
     androidx.compose.runtime.key(videoId) {
-        var playerViewInstance: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView? by remember { mutableStateOf(null) }
-
-        DisposableEffect(lifecycleOwner, videoId) {
-            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-                if (event == androidx.lifecycle.Lifecycle.Event.ON_DESTROY) {
-                    playerViewInstance?.release()
-                }
-            }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            
-            onDispose {
-                try {
-                    lifecycleOwner.lifecycle.removeObserver(observer)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                playerViewInstance?.let { pv ->
-                    try {
-                        lifecycleOwner.lifecycle.removeObserver(pv)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                    try {
-                        pv.release()
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            }
-        }
-
         androidx.compose.ui.viewinterop.AndroidView(
             modifier = modifier.fillMaxSize(),
             factory = { ctx ->
                 com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView(ctx).apply {
-                    enableAutomaticInitialization = false
-                    layoutParams = android.view.ViewGroup.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    playerViewInstance = this
                     lifecycleOwner.lifecycle.addObserver(this)
                     
-                    initialize(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
+                    addYouTubePlayerListener(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
                         override fun onReady(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
-                            youTubePlayer.cueVideo(videoId, 0f)
+                            try {
+                                youTubePlayer.loadVideo(videoId, 0f)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
                         }
                     })
                 }
             },
-            update = {}
+            update = {
+                // Managed by key(videoId) resetting design
+            },
+            onRelease = { playerView ->
+                try {
+                    lifecycleOwner.lifecycle.removeObserver(playerView)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                try {
+                    playerView.release()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         )
     }
 }
 
 @Composable
 fun BrowserVideoPlayer(urlOrVideoId: String, isYoutube: Boolean, modifier: Modifier = Modifier) {
-    androidx.compose.ui.viewinterop.AndroidView(
-        modifier = modifier.fillMaxSize(),
-        factory = { ctx ->
-            android.webkit.WebView(ctx).apply {
-                settings.apply {
-                    javaScriptEnabled = true
-                    mediaPlaybackRequiresUserGesture = false
-                    domStorageEnabled = true
-                    useWideViewPort = true
-                    loadWithOverviewMode = true
-                    databaseEnabled = true
-                    userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36"
+    androidx.compose.runtime.key(urlOrVideoId) {
+        androidx.compose.ui.viewinterop.AndroidView(
+            modifier = modifier.fillMaxSize(),
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    settings.apply {
+                        javaScriptEnabled = true
+                        mediaPlaybackRequiresUserGesture = false
+                        domStorageEnabled = true
+                        useWideViewPort = true
+                        loadWithOverviewMode = true
+                        databaseEnabled = true
+                        userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36"
+                    }
+                    webViewClient = android.webkit.WebViewClient()
+                    webChromeClient = android.webkit.WebChromeClient()
+                    
+                    if (isYoutube) {
+                        val htmlContent = """
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                                <style>
+                                    body, html { margin:0; padding:0; width:100%; height:100%; background-color:#000; overflow:hidden; }
+                                    iframe { width:100%; height:100%; border:none; }
+                                </style>
+                            </head>
+                            <body>
+                                <iframe id="ytplayer" type="text/html" width="100%" height="100%"
+                                    src="https://www.youtube.com/embed/$urlOrVideoId?autoplay=1&controls=1&fs=1&rel=0&showinfo=0&iv_load_policy=3&modestbranding=1&origin=https://www.youtube.com"
+                                    allowfullscreen allow="autoplay; encrypted-media">
+                                </iframe>
+                            </body>
+                            </html>
+                        """.trimIndent()
+                        loadDataWithBaseURL("https://www.youtube.com", htmlContent, "text/html", "UTF-8", null)
+                    } else {
+                        val htmlContent = """
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                <style>
+                                    body, html { margin:0; padding:0; width:100%; height:100%; background-color:#000; overflow:hidden; display:flex; justify-content:center; align-items:center; }
+                                    video { width:100% !important; height:auto; max-height:100%; outline:none; }
+                                </style>
+                            </head>
+                            <body>
+                                <video id="player" controls autoplay playsinline preload="auto">
+                                    <source src="$urlOrVideoId" type="application/x-mpegURL">
+                                    <source src="$urlOrVideoId" type="video/mp4">
+                                    Your browser does not support HTML5 video streaming.
+                                </video>
+                            </body>
+                            </html>
+                        """.trimIndent()
+                        loadDataWithBaseURL("https://win.makkahlive.net", htmlContent, "text/html", "UTF-8", null)
+                    }
                 }
-                webViewClient = android.webkit.WebViewClient()
-                webChromeClient = android.webkit.WebChromeClient()
-                
-                val embedUrl = if (isYoutube) {
-                    "https://www.youtube.com/embed/$urlOrVideoId?autoplay=1&vq=hd720&controls=1&showinfo=0&rel=0"
-                } else {
-                    urlOrVideoId
-                }
-                
-                if (isYoutube) {
-                    loadUrl(embedUrl)
-                } else {
-                    val htmlContent = """
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                            <style>
-                                body, html { margin:0; padding:0; width:100%; height:100%; background-color:#000; overflow:hidden; display:flex; justify-content:center; align-items:center; }
-                                video { width:100% !important; height:auto; max-height:100%; outline:none; }
-                            </style>
-                        </head>
-                        <body>
-                            <video id="player" controls autoplay playsinline preload="auto">
-                                <source src="$urlOrVideoId" type="application/x-mpegURL">
-                                <source src="$urlOrVideoId" type="video/mp4">
-                                Your browser does not support HTML5 video streaming.
-                            </video>
-                        </body>
-                        </html>
-                    """.trimIndent()
-                    loadDataWithBaseURL("https://win.makkahlive.net", htmlContent, "text/html", "UTF-8", null)
+            },
+            update = {
+                // Managed by key
+            },
+            onRelease = { webView ->
+                try {
+                    webView.stopLoading()
+                    webView.clearHistory()
+                    webView.removeAllViews()
+                    webView.destroy()
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             }
-        },
-        update = { webView ->
-            // No-op
-        }
-    )
+        )
+    }
 }
 
 @Composable
 fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
     var activeTitle by remember { mutableStateOf("") }
     var activeYoutubeId by remember { mutableStateOf("") }
+    var activeSpeaker by remember { mutableStateOf("") }
+    var useBrowserPlayerForYt by remember { mutableStateOf(true) }
     var activeStreamUrl by remember { mutableStateOf("") }
     var isListLoading by remember { mutableStateOf(false) }
+
+    val youtubeResults by viewModel.youtubeSearchResults.collectAsState()
+    val isYoutubeLoading by viewModel.isYoutubeLoading.collectAsState()
 
     if (activeYoutubeId.isNotEmpty()) {
         BackHandler {
@@ -6144,13 +6174,22 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
         )
     )
 
-    // Reset search query and count on section change with a premium YouTube loading simulation
-    LaunchedEffect(mediaSubSection) {
-        searchQuery = ""
-        visibleItemCount = 15
-        isListLoading = true
-        kotlinx.coroutines.delay(650) // Smooth, elegant YouTube API simulation delay
-        isListLoading = false
+    // Real-time automatic search observer on category or user typing
+    LaunchedEffect(mediaSubSection, searchQuery) {
+        if (mediaSubSection != "video") {
+            val queryToSearch = if (searchQuery.isNotBlank()) {
+                searchQuery
+            } else {
+                when (mediaSubSection) {
+                    "waz" -> "islamic waz bangla"
+                    "quran" -> "quran recitation soothing"
+                    "quran_translation" -> "quran bangla anubad"
+                    "nasheed" -> "beautiful emotional nasheed"
+                    else -> "daily duas and azkar"
+                }
+            }
+            viewModel.searchYoutube(queryToSearch)
+        }
     }
 
     Column(
@@ -6164,82 +6203,16 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
             
             // 1. UNIFIED VIDEO PLAYERS
 
-            // (A) YouTube Video Player Dialog (Native)
+            // (A) YouTube Video Player Dialog (Native IFrame SDK Custom view with related feed)
             if (activeYoutubeId.isNotEmpty()) {
-                androidx.compose.ui.window.Dialog(
-                    onDismissRequest = { activeYoutubeId = "" },
-                    properties = androidx.compose.ui.window.DialogProperties(
-                        usePlatformDefaultWidth = false,
-                        dismissOnBackPress = true,
-                        dismissOnClickOutside = false
-                    )
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black)
-                    ) {
-                        if (!activeYoutubeId.startsWith("http")) {
-                            YoutubePlayer(
-                                videoId = activeYoutubeId,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            BrowserVideoPlayer(
-                                urlOrVideoId = activeYoutubeId,
-                                isYoutube = false,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-
-                        // Navigation header overlay - translucent and floating with rounded corners
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.TopCenter)
-                                .padding(12.dp)
-                                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            FilledIconButton(
-                                onClick = { activeYoutubeId = "" },
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = Color.White.copy(alpha = 0.15f),
-                                    contentColor = Color.White
-                                ),
-                                modifier = Modifier.size(34.dp),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Default.ArrowBack,
-                                    contentDescription = if (isBn) "ফিরে যান" else "Back",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = activeTitle,
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = if (isBn) "ইউটিউব ভিডিও প্লেয়ার • ফুল স্ক্রিন" else "YouTube Player • Full Screen",
-                                    color = SoftGoldBorder,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-                }
+                InAppYoutubePlayerDialog(
+                    videoId = activeYoutubeId,
+                    videoTitle = activeTitle,
+                    videoSpeaker = activeSpeaker,
+                    relatedVideos = youtubeResults,
+                    isBn = isBn,
+                    onDismiss = { activeYoutubeId = "" }
+                )
             }
 
             // (B) Live Direct HLS/Exo Player Video Dialog (Media3 Native)
@@ -6475,7 +6448,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                 )
 
                 // 4. GENERATE RELEVANT VIDEO LIST DIRECTLY (ON-DRAG ENDLESS SCROLLING)
-                val targetVideos = remember(mediaSubSection, searchQuery, visibleItemCount) {
+                val targetVideos = remember(mediaSubSection, searchQuery, youtubeResults) {
                     if (mediaSubSection == "video") {
                         if (searchQuery.isBlank()) liveChannels else {
                             liveChannels.filter {
@@ -6484,11 +6457,13 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                             }
                         }
                     } else {
-                        generateIslamicVideos(mediaSubSection, searchQuery, visibleItemCount, isBn)
+                        youtubeResults
                     }
                 }
 
-                if (isListLoading) {
+                val isListLoadingToShow = if (mediaSubSection == "video") false else isYoutubeLoading
+
+                if (isListLoadingToShow) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -6544,6 +6519,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                                     .fillMaxWidth()
                                     .clickable {
                                         activeTitle = item.title
+                                        activeSpeaker = item.speaker
                                         if (item.youtubeId.isNotEmpty()) {
                                             activeYoutubeId = item.youtubeId
                                             activeStreamUrl = ""
@@ -6579,7 +6555,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                                     ) {
                                         coil.compose.AsyncImage(
                                             model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
-                                                .data(if (item.thumbnail.startsWith("https://img.youtube.com")) item.thumbnail.replace("https://img.youtube.com", "https://i.ytimg.com") else item.thumbnail)
+                                                .data(item.thumbnail)
                                                 .crossfade(true)
                                                 .placeholder(com.example.R.drawable.islamic_mecca_wallpaper)
                                                 .error(com.example.R.drawable.islamic_mecca_wallpaper)
@@ -6747,7 +6723,7 @@ private fun generateIslamicVideos(category: String, query: String, count: Int, i
                 val title = if (isBn) titleBn else titleEn
                 val duration = String.format("%02d:%02d", (10 + i * 3) % 60 + 10, (15 + i * 7) % 60)
                 
-                val wazYts = listOf("gT97R83H7A8", "uD7pTnd_nps", "N62b_M4u-pQ", "LrjE-uK1d8E", "_x47B0R2gZ8")
+                val wazYts = listOf("sOnFscD795o", "6g_f3O-46sc", "N80C2U9uI8c", "U_65iMKyX00", "6WvIdMcbo6I")
                 val youtubeId = wazYts[i % wazYts.size]
                 val thumbnail = "https://img.youtube.com/vi/$youtubeId/hqdefault.jpg"
                 
@@ -6810,7 +6786,7 @@ private fun generateIslamicVideos(category: String, query: String, count: Int, i
                 val title = if (isBn) titleBn else titleEn
                 val duration = String.format("%02d:%02d", (5 + i * 2) % 45 + 5, (10 + i * 8) % 60)
                 
-                val quranYts = listOf("8m9O_QBya3U", "fO_C7k83WbU", "HlY8Acs10M8", "yW-Z9zS3V1k", "294dbe1y0bA")
+                val quranYts = listOf("Sg_kP23x1Qc", "6WvIdMcbo6I", "X_u-0uR1q-s", "y7u1oF4fQ10", "S20a0Z_eSm0")
                 val youtubeId = quranYts[i % quranYts.size]
                 val thumbnail = "https://img.youtube.com/vi/$youtubeId/hqdefault.jpg"
                 
@@ -6863,7 +6839,7 @@ private fun generateIslamicVideos(category: String, query: String, count: Int, i
                 val title = if (isBn) titleBn else titleEn
                 val duration = String.format("%02d:%02d", (8 + i * 4) % 55 + 5, (20 + i * 6) % 60)
                 
-                val tagYts = listOf("8m9O_QBya3U", "fO_C7k83WbU", "HlY8Acs10M8", "yW-Z9zS3V1k", "294dbe1y0bA")
+                val tagYts = listOf("Sg_kP23x1Qc", "6WvIdMcbo6I", "X_u-0uR1q-s", "y7u1oF4fQ10", "S20a0Z_eSm0")
                 val youtubeId = tagYts[i % tagYts.size]
                 val thumbnail = "https://img.youtube.com/vi/$youtubeId/hqdefault.jpg"
                 
@@ -6918,7 +6894,7 @@ private fun generateIslamicVideos(category: String, query: String, count: Int, i
                 val title = if (isBn) titleBn else titleEn
                 val duration = String.format("%02d:%02d", (3 + i) % 10 + 3, (5 + i * 11) % 60)
                 
-                val nasheedYts = listOf("Vqfy4x56pSg", "S6k4Y28fDwg", "SgK6x6f4mFw", "yv7S89g9fN8", "W9mR6C72bE0")
+                val nasheedYts = listOf("O_1LgUWeYsw", "Sg_kP23x1Qc", "6WvIdMcbo6I", "X_u-0uR1q-s", "y7u1oF4fQ10")
                 val youtubeId = nasheedYts[i % nasheedYts.size]
                 val thumbnail = "https://img.youtube.com/vi/$youtubeId/hqdefault.jpg"
                 
@@ -6968,7 +6944,7 @@ private fun generateIslamicVideos(category: String, query: String, count: Int, i
                 val title = if (isBn) titleBn else titleEn
                 val duration = String.format("%02d:%02d", (4 + i * 2) % 20 + 3, (15 + i * 9) % 60)
                 
-                val duaYts = listOf("p7E3H6A9kY0", "7Sg1WbY1D4U", "I5fR7z_xWbY", "8m9O_QBya3U", "HlY8Acs10M8")
+                val duaYts = listOf("sOnFscD795o", "Sg_kP23x1Qc", "6WvIdMcbo6I", "X_u-0uR1q-s", "y7u1oF4fQ10")
                 val youtubeId = duaYts[i % duaYts.size]
                 val thumbnail = "https://img.youtube.com/vi/$youtubeId/hqdefault.jpg"
                 
@@ -6993,7 +6969,7 @@ private fun generateIslamicVideos(category: String, query: String, count: Int, i
     
     if (list.isEmpty() && query.isNotEmpty()) {
         val title = if (isBn) "\"$query\" সম্পর্কিত ইসলামিক ওয়াজ ও تিলাওয়াত ভিডিও" else "Islamic video for \"$query\""
-        val fallbackYt = "gT97R83H7A8"
+        val fallbackYt = "sOnFscD795o"
         list.add(
             com.example.data.IslamicVideo(
                 id = "query_custom_match",

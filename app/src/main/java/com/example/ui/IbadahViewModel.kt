@@ -45,6 +45,40 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
         _playBengaliTranslation.value = !_playBengaliTranslation.value
     }
 
+    private val _hasSeenOnboarding = MutableStateFlow(false)
+    val hasSeenOnboarding: StateFlow<Boolean> = _hasSeenOnboarding.asStateFlow()
+
+    fun setHasSeenOnboarding(seen: Boolean) {
+        _hasSeenOnboarding.value = seen
+        getDeedsPrefs().edit().putBoolean("has_seen_onboarding_v2", seen).apply()
+    }
+
+    // --- YouTube API Search State ---
+    private val _youtubeSearchQuery = MutableStateFlow("")
+    val youtubeSearchQuery = _youtubeSearchQuery.asStateFlow()
+
+    private val _youtubeSearchResults = MutableStateFlow<List<IslamicVideo>>(emptyList())
+    val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
+
+    private val _isYoutubeLoading = MutableStateFlow(false)
+    val isYoutubeLoading = _isYoutubeLoading.asStateFlow()
+
+    fun searchYoutube(query: String) {
+        _youtubeSearchQuery.value = query
+        viewModelScope.launch(Dispatchers.IO) {
+            _isYoutubeLoading.value = true
+            try {
+                // Search via official YouTube Data API v3 (caches results inside)
+                val results = com.example.service.YoutubeApiClient.searchYouTubeVideos(context, query)
+                _youtubeSearchResults.value = results
+            } catch (e: Exception) {
+                android.util.Log.e("IbadahViewModel", "Error searching YouTube", e)
+            } finally {
+                _isYoutubeLoading.value = false
+            }
+        }
+    }
+
     private fun translatePartBn(englishStr: String): String {
         return when (englishStr.lowercase(java.util.Locale.ROOT).trim()) {
             "dhaka" -> "ঢাকা"
@@ -237,6 +271,21 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
         val newVal = !_use24HourFormat.value
         _use24HourFormat.value = newVal
         getDeedsPrefs().edit().putBoolean("use_24h_format", newVal).apply()
+        
+        // Broadcast update to the home screen widget
+        try {
+            val widgetUpdateIntent = android.content.Intent("com.example.action.PRAYER_WIDGET_REFRESH").apply {
+                component = android.content.ComponentName(getApplication<Application>(), "com.example.widget.PrayerAppWidgetProvider")
+            }
+            getApplication<Application>().sendBroadcast(widgetUpdateIntent)
+
+            val detailedWidgetUpdateIntent = android.content.Intent("com.example.action.DETAILED_PRAYER_WIDGET_REFRESH").apply {
+                component = android.content.ComponentName(getApplication<Application>(), "com.example.widget.DetailedPrayerAppWidgetProvider")
+            }
+            getApplication<Application>().sendBroadcast(detailedWidgetUpdateIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun toggleBgMusic() {
@@ -1237,6 +1286,7 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         val prefs = getDeedsPrefs()
+        _hasSeenOnboarding.value = prefs.getBoolean("has_seen_onboarding_v2", false)
         _use24HourFormat.value = prefs.getBoolean("use_24h_format", false)
         _isBgMusicEnabled.value = prefs.getBoolean("is_bg_music_enabled", true)
         val isCustom = prefs.getBoolean("is_custom_location", false)
@@ -1373,6 +1423,21 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
                 if (currentMinStr != lastCheckedMinuteStr) {
                     lastCheckedMinuteStr = currentMinStr
                     checkAndTriggerAlarms(now, currentMinStr)
+                    
+                    // Keep home widget updated precisely every minute without lag!
+                    try {
+                        val widgetUpdateIntent = android.content.Intent("com.example.action.PRAYER_WIDGET_REFRESH").apply {
+                            component = android.content.ComponentName(context, "com.example.widget.PrayerAppWidgetProvider")
+                        }
+                        context.sendBroadcast(widgetUpdateIntent)
+
+                        val detailedWidgetUpdateIntent = android.content.Intent("com.example.action.DETAILED_PRAYER_WIDGET_REFRESH").apply {
+                            component = android.content.ComponentName(context, "com.example.widget.DetailedPrayerAppWidgetProvider")
+                        }
+                        context.sendBroadcast(detailedWidgetUpdateIntent)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
 
                 delay(1000)
@@ -1424,6 +1489,11 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
                 component = android.content.ComponentName(context, "com.example.widget.PrayerAppWidgetProvider")
             }
             context.sendBroadcast(widgetUpdateIntent)
+
+            val detailedWidgetUpdateIntent = android.content.Intent("com.example.action.DETAILED_PRAYER_WIDGET_REFRESH").apply {
+                component = android.content.ComponentName(context, "com.example.widget.DetailedPrayerAppWidgetProvider")
+            }
+            context.sendBroadcast(detailedWidgetUpdateIntent)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -2922,6 +2992,14 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
 
         // Reload the month mapping
         loadMonthTrackerSummary()
+
+        // Broadcast to refresh home screen widgets
+        try {
+            val updateIntent = android.content.Intent("com.example.action.IBADAH_DASHBOARD_WIDGET_REFRESH")
+            context.sendBroadcast(updateIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun loadMonthTrackerSummary() {
