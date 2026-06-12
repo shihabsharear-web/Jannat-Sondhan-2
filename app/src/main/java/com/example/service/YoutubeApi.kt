@@ -52,11 +52,18 @@ data class YoutubeVideosResponse(
 
 data class VideoItem(
     @Json(name = "id") val id: String? = null,
-    @Json(name = "contentDetails") val contentDetails: ContentDetails? = null
+    @Json(name = "contentDetails") val contentDetails: ContentDetails? = null,
+    @Json(name = "status") val status: VideoStatus? = null
 )
 
 data class ContentDetails(
     @Json(name = "duration") val duration: String? = null
+)
+
+data class VideoStatus(
+    @Json(name = "embeddable") val embeddable: Boolean? = true,
+    @Json(name = "privacyStatus") val privacyStatus: String? = null,
+    @Json(name = "uploadStatus") val uploadStatus: String? = null
 )
 
 interface YoutubeApiService {
@@ -71,7 +78,7 @@ interface YoutubeApiService {
 
     @GET("v3/videos")
     suspend fun getVideoDetails(
-        @Query("part") part: String = "contentDetails",
+        @Query("part") part: String = "contentDetails,status",
         @Query("id") ids: String,
         @Query("key") apiKey: String
     ): YoutubeVideosResponse
@@ -81,6 +88,37 @@ object YoutubeApiClient {
     private const val TAG = "YoutubeApiClient"
     private const val BASE_URL = "https://www.googleapis.com/youtube/"
     private const val CACHE_PREFS_NAME = "ibadah_youtube_cache"
+    private const val BLOCKED_PREFS_NAME = "ibadah_youtube_blocked"
+
+    fun blockVideo(context: Context, videoId: String) {
+        try {
+            val prefs = context.getSharedPreferences(BLOCKED_PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putBoolean(videoId, true).apply()
+            Log.d(TAG, "Video $videoId added to local blocklist because of embedding error")
+            clearCaches(context)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error blocking video", e)
+        }
+    }
+
+    fun isBlocked(context: Context, videoId: String): Boolean {
+        return try {
+            val prefs = context.getSharedPreferences(BLOCKED_PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.getBoolean(videoId, false)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun clearCaches(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(CACHE_PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().clear().apply()
+            Log.d(TAG, "Cleared all local search caches to refresh blocked statuses")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing cache", e)
+        }
+    }
 
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
@@ -174,7 +212,13 @@ object YoutubeApiClient {
         // 1. Try Cache First!
         val cached = getFromCache(context, cleanQuery)
         if (cached != null) {
-            return cached
+            val validCached = cached.filter { !isBlocked(context, it.youtubeId) }
+            if (validCached.size == cached.size) {
+                return cached
+            } else {
+                saveToCache(context, cleanQuery, validCached)
+                return validCached
+            }
         }
 
         // 2. Try Youtube Live API call
@@ -193,26 +237,37 @@ object YoutubeApiClient {
                 if (items.isNotEmpty()) {
                     val videoIds = items.mapNotNull { it.id?.videoId }.joinToString(",")
                     
-                    // Fetch duration using videos endpoint
+                    // Fetch duration and embedding status using videos endpoint
                     val videoDetailsMap = mutableMapOf<String, String>()
+                    val apiBlockedIds = mutableSetOf<String>()
                     if (videoIds.isNotEmpty()) {
                         try {
                             val detailsResponse = service.getVideoDetails(ids = videoIds, apiKey = apiKey)
                             detailsResponse.items?.forEach { videoItem ->
                                 val id = videoItem.id
                                 val rawDuration = videoItem.contentDetails?.duration ?: ""
+                                val isEmbeddable = videoItem.status?.embeddable ?: true
+                                
                                 if (id != null) {
                                     videoDetailsMap[id] = parseISO8601Duration(rawDuration)
+                                    if (!isEmbeddable) {
+                                        apiBlockedIds.add(id)
+                                        blockVideo(context, id)
+                                    }
                                 }
                             }
                         } catch (eDetails: Exception) {
-                            Log.e(TAG, "Error fetching video details (durations)", eDetails)
+                            Log.e(TAG, "Error fetching video details", eDetails)
                         }
                     }
 
-                    // Convert to domain model List<IslamicVideo>
+                    // Convert to domain model List<IslamicVideo> and exclude blocked ones
                     val resultVideos = items.mapNotNull { item ->
                         val vId = item.id?.videoId ?: return@mapNotNull null
+                        if (isBlocked(context, vId) || apiBlockedIds.contains(vId)) {
+                            return@mapNotNull null
+                        }
+                        
                         val title = item.snippet?.title ?: "Islamic Video"
                         val speaker = item.snippet?.channelTitle ?: "Islamic Channel"
                         val thumbnail = item.snippet?.thumbnails?.high?.url 
@@ -244,10 +299,11 @@ object YoutubeApiClient {
 
         // 3. Fallback Mocked Simulation when Key is not configured or fails
         val fallback = generateSimulatedResults(cleanQuery, maxResults)
-        if (fallback.isNotEmpty()) {
-            saveToCache(context, cleanQuery, fallback)
+        val filteredFallback = fallback.filter { !isBlocked(context, it.youtubeId) }
+        if (filteredFallback.isNotEmpty()) {
+            saveToCache(context, cleanQuery, filteredFallback)
         }
-        return fallback
+        return filteredFallback
     }
 
     private fun generateSimulatedResults(query: String, count: Int): List<IslamicVideo> {
@@ -303,6 +359,79 @@ object YoutubeApiClient {
                 thumbnail = "https://img.youtube.com/vi/F8eWBeJ0-1E/mqdefault.jpg",
                 duration = "14:10",
                 youtubeId = "F8eWBeJ0-1E"
+            ),
+            // Explicitly Add Trusted Channel Videos for Robust Mocks
+            IslamicVideo(
+                id = "yt_ms1",
+                title = "The Power of Dua (Sincere Cry) - Beautiful Reminder",
+                speaker = "MercifulServant",
+                thumbnail = "https://img.youtube.com/vi/DdgvQsc2yD8/mqdefault.jpg",
+                duration = "08:15",
+                youtubeId = "DdgvQsc2yD8"
+            ),
+            IslamicVideo(
+                id = "yt_ms2",
+                title = "When You Feel Lost or Sad - Beautiful Reminders",
+                speaker = "MercifulServant",
+                thumbnail = "https://img.youtube.com/vi/g_bZ_gN8WqE/mqdefault.jpg",
+                duration = "10:30",
+                youtubeId = "g_bZ_gN8WqE"
+            ),
+            IslamicVideo(
+                id = "yt_ms3",
+                title = "Unbending Trust in Allah's Plan (Tawakkul)",
+                speaker = "MercifulServant",
+                thumbnail = "https://img.youtube.com/vi/F8eWBeJ0-1E/mqdefault.jpg",
+                duration = "12:45",
+                youtubeId = "F8eWBeJ0-1E"
+            ),
+            IslamicVideo(
+                id = "yt_oi1",
+                title = "How Satan Shuts Down Your Good Deeds - Deep Discussion",
+                speaker = "One Islam Productions",
+                thumbnail = "https://img.youtube.com/vi/W-Q8P8A4W3M/mqdefault.jpg",
+                duration = "15:20",
+                youtubeId = "W-Q8P8A4W3M"
+            ),
+            IslamicVideo(
+                id = "yt_oi2",
+                title = "The Importance of Fasting & Daily Sunnahs",
+                speaker = "One Islam Productions",
+                thumbnail = "https://img.youtube.com/vi/6S1-NveF5C8/mqdefault.jpg",
+                duration = "11:45",
+                youtubeId = "6S1-NveF5C8"
+            ),
+            IslamicVideo(
+                id = "yt_oi3",
+                title = "What Happens After We Die? - Educational Dawah Series",
+                speaker = "One Islam Productions",
+                thumbnail = "https://img.youtube.com/vi/c_L5b3eZ6g4/mqdefault.jpg",
+                duration = "22:10",
+                youtubeId = "c_L5b3eZ6g4"
+            ),
+            IslamicVideo(
+                id = "yt_pt1",
+                title = "Scientific Miracles in the Noble Quran - Dr. Zakir Naik",
+                speaker = "Peace TV",
+                thumbnail = "https://img.youtube.com/vi/F8eWBeJ0-1E/mqdefault.jpg",
+                duration = "18:40",
+                youtubeId = "F8eWBeJ0-1E"
+            ),
+            IslamicVideo(
+                id = "yt_pt2",
+                title = "Fundamentals of Islamic Jurisprudence & Hadith Studies",
+                speaker = "Peace TV",
+                thumbnail = "https://img.youtube.com/vi/W-Q8P8A4W3M/mqdefault.jpg",
+                duration = "14:15",
+                youtubeId = "W-Q8P8A4W3M"
+            ),
+            IslamicVideo(
+                id = "yt_pt3",
+                title = "Questions and Answers on Peace, Faith, and Humanity",
+                speaker = "Peace TV",
+                thumbnail = "https://img.youtube.com/vi/6S1-NveF5C8/mqdefault.jpg",
+                duration = "25:30",
+                youtubeId = "6S1-NveF5C8"
             )
         )
 

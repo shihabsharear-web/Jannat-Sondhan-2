@@ -168,6 +168,13 @@ data class QuizQuestion(
     val explanationEn: String,
     val points: Int = 10
 )
-
-
+data class DailymotionVideo(
+    val id: String,
+    val title: String,
+    val channelName: String,
+    val thumbnail: String,
+    val durationString: String,
+    val durationSeconds: Int,
+    val createdTime: Long = 0L
+)
 

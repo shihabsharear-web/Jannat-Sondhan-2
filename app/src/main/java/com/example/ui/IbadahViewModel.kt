@@ -63,13 +63,24 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
     private val _isYoutubeLoading = MutableStateFlow(false)
     val isYoutubeLoading = _isYoutubeLoading.asStateFlow()
 
+    // --- Smart Recommendations & User Interests ---
+    private val _userInterests = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val userInterests = _userInterests.asStateFlow()
+
+    private val _recommendedVideos = MutableStateFlow<List<IslamicVideo>>(emptyList())
+    val recommendedVideos = _recommendedVideos.asStateFlow()
+
     fun searchYoutube(query: String) {
         _youtubeSearchQuery.value = query
         viewModelScope.launch(Dispatchers.IO) {
             _isYoutubeLoading.value = true
             try {
                 // Search via official YouTube Data API v3 (caches results inside)
-                val results = com.example.service.YoutubeApiClient.searchYouTubeVideos(context, query)
+                var results = com.example.service.YoutubeApiClient.searchYouTubeVideos(context, query)
+                
+                // Prioritize and promote videos from trusted channels first
+                results = prioritizeTrustedChannels(results)
+                
                 _youtubeSearchResults.value = results
             } catch (e: Exception) {
                 android.util.Log.e("IbadahViewModel", "Error searching YouTube", e)
@@ -77,6 +88,201 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
                 _isYoutubeLoading.value = false
             }
         }
+    }
+
+    private fun prioritizeTrustedChannels(videos: List<IslamicVideo>): List<IslamicVideo> {
+        val trustedChannels = listOf("MercifulServant", "One Islam Productions", "Peace TV")
+        val trustedList = mutableListOf<IslamicVideo>()
+        val regularList = mutableListOf<IslamicVideo>()
+        
+        videos.forEach { video ->
+            val isTrusted = trustedChannels.any { channel ->
+                video.speaker.lowercase(Locale.ROOT).contains(channel.lowercase(Locale.ROOT))
+            }
+            if (isTrusted) {
+                trustedList.add(video)
+            } else {
+                regularList.add(video)
+            }
+        }
+        return trustedList + regularList
+    }
+
+    fun recordVideoClick(video: IslamicVideo) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val speaker = video.speaker
+                if (speaker.isNotBlank()) {
+                    val prefs = context.getSharedPreferences("ibadah_user_interests", android.content.Context.MODE_PRIVATE)
+                    val currentClicks = prefs.getInt(speaker, 0)
+                    prefs.edit().putInt(speaker, currentClicks + 1).apply()
+                    
+                    // Also store last clicked channel
+                    prefs.edit().putString("last_clicked_channel", speaker).apply()
+                    
+                    loadUserInterests()
+                    updateRecommendations()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("IbadahViewModel", "Error recording video click", e)
+            }
+        }
+    }
+
+    fun loadUserInterests() {
+        try {
+            val prefs = context.getSharedPreferences("ibadah_user_interests", android.content.Context.MODE_PRIVATE)
+            val interests = mutableMapOf<String, Int>()
+            val channels = listOf("MercifulServant", "One Islam Productions", "Peace TV")
+            channels.forEach { channel ->
+                val clicks = prefs.getInt(channel, 0)
+                if (clicks > 0) {
+                    interests[channel] = clicks
+                }
+            }
+            _userInterests.value = interests
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun updateRecommendations() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val prefs = context.getSharedPreferences("ibadah_user_interests", android.content.Context.MODE_PRIVATE)
+                val lastClicked = prefs.getString("last_clicked_channel", null)
+                val recommendationPool = mutableListOf<IslamicVideo>()
+                
+                val mercifulVideos = listOf(
+                    IslamicVideo(
+                        id = "rec_ms1",
+                        title = "The Power of Dua (Sincere Cry) - Beautiful Reminder",
+                        speaker = "MercifulServant",
+                        thumbnail = "https://img.youtube.com/vi/DdgvQsc2yD8/mqdefault.jpg",
+                        duration = "08:15",
+                        youtubeId = "DdgvQsc2yD8"
+                    ),
+                    IslamicVideo(
+                        id = "rec_ms2",
+                        title = "When You Feel Lost or Sad - Beautiful Reminders",
+                        speaker = "MercifulServant",
+                        thumbnail = "https://img.youtube.com/vi/g_bZ_gN8WqE/mqdefault.jpg",
+                        duration = "10:30",
+                        youtubeId = "g_bZ_gN8WqE"
+                    ),
+                    IslamicVideo(
+                        id = "rec_ms3",
+                        title = "Unbending Trust in Allah's Plan (Tawakkul)",
+                        speaker = "MercifulServant",
+                        thumbnail = "https://img.youtube.com/vi/F8eWBeJ0-1E/mqdefault.jpg",
+                        duration = "12:45",
+                        youtubeId = "F8eWBeJ0-1E"
+                    )
+                )
+
+                val oneIslamVideos = listOf(
+                    IslamicVideo(
+                        id = "rec_oi1",
+                        title = "How Satan Shuts Down Your Good Deeds - Deep Discussion",
+                        speaker = "One Islam Productions",
+                        thumbnail = "https://img.youtube.com/vi/W-Q8P8A4W3M/mqdefault.jpg",
+                        duration = "15:20",
+                        youtubeId = "W-Q8P8A4W3M"
+                    ),
+                    IslamicVideo(
+                        id = "rec_oi2",
+                        title = "The Importance of Fasting & Daily Sunnahs",
+                        speaker = "One Islam Productions",
+                        thumbnail = "https://img.youtube.com/vi/6S1-NveF5C8/mqdefault.jpg",
+                        duration = "11:45",
+                        youtubeId = "6S1-NveF5C8"
+                    ),
+                    IslamicVideo(
+                        id = "rec_oi3",
+                        title = "What Happens After We Die? - Educational Dawah Series",
+                        speaker = "One Islam Productions",
+                        thumbnail = "https://img.youtube.com/vi/c_L5b3eZ6g4/mqdefault.jpg",
+                        duration = "22:10",
+                        youtubeId = "c_L5b3eZ6g4"
+                    )
+                )
+
+                val peaceTvVideos = listOf(
+                    IslamicVideo(
+                        id = "rec_pt1",
+                        title = "Scientific Miracles in the Noble Quran - Dr. Zakir Naik",
+                        speaker = "Peace TV",
+                        thumbnail = "https://img.youtube.com/vi/F8eWBeJ0-1E/mqdefault.jpg",
+                        duration = "18:40",
+                        youtubeId = "F8eWBeJ0-1E"
+                    ),
+                    IslamicVideo(
+                        id = "rec_pt2",
+                        title = "Fundamentals of Islamic Jurisprudence & Hadith Studies",
+                        speaker = "Peace TV",
+                        thumbnail = "https://img.youtube.com/vi/W-Q8P8A4W3M/mqdefault.jpg",
+                        duration = "14:15",
+                        youtubeId = "W-Q8P8A4W3M"
+                    ),
+                    IslamicVideo(
+                        id = "rec_pt3",
+                        title = "Questions and Answers on Peace, Faith, and Humanity",
+                        speaker = "Peace TV",
+                        thumbnail = "https://img.youtube.com/vi/6S1-NveF5C8/mqdefault.jpg",
+                        duration = "25:30",
+                        youtubeId = "6S1-NveF5C8"
+                    )
+                )
+
+                if (lastClicked != null) {
+                    when {
+                        lastClicked.lowercase(Locale.ROOT).contains("merciful") -> {
+                            recommendationPool.addAll(mercifulVideos)
+                            recommendationPool.add(oneIslamVideos[0])
+                            recommendationPool.add(peaceTvVideos[0])
+                        }
+                        lastClicked.lowercase(Locale.ROOT).contains("one islam") -> {
+                            recommendationPool.addAll(oneIslamVideos)
+                            recommendationPool.add(mercifulVideos[0])
+                            recommendationPool.add(peaceTvVideos[0])
+                        }
+                        lastClicked.lowercase(Locale.ROOT).contains("peace tv") -> {
+                            recommendationPool.addAll(peaceTvVideos)
+                            recommendationPool.add(mercifulVideos[0])
+                            recommendationPool.add(oneIslamVideos[0])
+                        }
+                        else -> {
+                            recommendationPool.add(mercifulVideos[0])
+                            recommendationPool.add(oneIslamVideos[0])
+                            recommendationPool.add(peaceTvVideos[0])
+                            recommendationPool.add(mercifulVideos[1])
+                        }
+                    }
+                } else {
+                    recommendationPool.add(mercifulVideos[0])
+                    recommendationPool.add(oneIslamVideos[0])
+                    recommendationPool.add(peaceTvVideos[0])
+                    recommendationPool.add(mercifulVideos[1])
+                }
+
+                // Exclude already blocked ones from recommendations
+                val filteredRecs = recommendationPool.filter { !com.example.service.YoutubeApiClient.isBlocked(context, it.youtubeId) }
+                _recommendedVideos.value = filteredRecs
+            } catch (e: Exception) {
+                android.util.Log.e("IbadahViewModel", "Error updating recommendations", e)
+            }
+        }
+    }
+
+    fun removeVideoFromResults(videoId: String) {
+        val currentList = _youtubeSearchResults.value
+        val filteredList = currentList.filter { it.youtubeId != videoId }
+        _youtubeSearchResults.value = filteredList
+        // Permanently add to local blocklist and clear cache
+        com.example.service.YoutubeApiClient.blockVideo(context, videoId)
+        
+        // Also refresh recommendations in case it was a recommended item
+        updateRecommendations()
     }
 
     private fun translatePartBn(englishStr: String): String {
@@ -1281,6 +1487,11 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
             _completedQuizDates.value = quizPrefs.getStringSet("completed_dates", emptySet()) ?: emptySet()
             _completedQuizMonths.value = quizPrefs.getStringSet("completed_months", emptySet()) ?: emptySet()
             _userName.value = quizPrefs.getString("user_name", "") ?: ""
+            
+            // Warm up trusted channel recommendations and user интересты
+            loadUserInterests()
+            updateRecommendations()
+            loadDailymotionBookmarks()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -3165,6 +3376,129 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
         _userPoints.value = 0
         _completedQuizDates.value = emptySet()
         _completedQuizMonths.value = emptySet()
+    }
+
+    // ===================================================================================
+    // DAILYMOTION MEDIA SYSTEM
+    // ===================================================================================
+    private val _dailymotionSearchResults = MutableStateFlow<List<DailymotionVideo>>(emptyList())
+    val dailymotionSearchResults: StateFlow<List<DailymotionVideo>> = _dailymotionSearchResults.asStateFlow()
+
+    private val _isDailymotionLoading = MutableStateFlow(false)
+    val isDailymotionLoading: StateFlow<Boolean> = _isDailymotionLoading.asStateFlow()
+
+    private val _dailymotionBookmarks = MutableStateFlow<Set<String>>(emptySet())
+    val dailymotionBookmarks: StateFlow<Set<String>> = _dailymotionBookmarks.asStateFlow()
+
+    private val _dailymotionBookmarkedVideos = MutableStateFlow<List<DailymotionVideo>>(emptyList())
+    val dailymotionBookmarkedVideos: StateFlow<List<DailymotionVideo>> = _dailymotionBookmarkedVideos.asStateFlow()
+
+    private val _relatedDailymotionVideos = MutableStateFlow<List<DailymotionVideo>>(emptyList())
+    val relatedDailymotionVideos: StateFlow<List<DailymotionVideo>> = _relatedDailymotionVideos.asStateFlow()
+
+    fun initDailymotionKeys() {
+        loadDailymotionBookmarks()
+    }
+
+    private fun getDailymotionPrefs() = context.getSharedPreferences("ibadah_dailymotion_prefs", android.content.Context.MODE_PRIVATE)
+
+    fun loadDailymotionBookmarks() {
+        try {
+            val prefs = getDailymotionPrefs()
+            val bookmarkedIds = prefs.getStringSet("bookmarked_ids", emptySet()) ?: emptySet()
+            _dailymotionBookmarks.value = bookmarkedIds
+
+            // Reconstruct DailymotionVideo items for each bookmark
+            val vList = mutableListOf<DailymotionVideo>()
+            val moshi = com.squareup.moshi.Moshi.Builder()
+                .addLast(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
+                .build()
+            val adapter = moshi.adapter(DailymotionVideo::class.java)
+
+            bookmarkedIds.forEach { id ->
+                val json = prefs.getString("video_data_$id", null)
+                if (json != null) {
+                    try {
+                        val video = adapter.fromJson(json)
+                        if (video != null) {
+                            vList.add(video)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+            _dailymotionBookmarkedVideos.value = vList
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun toggleDailymotionBookmark(video: DailymotionVideo) {
+        try {
+            val prefs = getDailymotionPrefs()
+            val currentIds = prefs.getStringSet("bookmarked_ids", emptySet())?.toMutableSet() ?: mutableSetOf()
+            val videoId = video.id
+
+            val moshi = com.squareup.moshi.Moshi.Builder()
+                .addLast(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
+                .build()
+            val adapter = moshi.adapter(DailymotionVideo::class.java)
+
+            if (currentIds.contains(videoId)) {
+                currentIds.remove(videoId)
+                prefs.edit()
+                    .putStringSet("bookmarked_ids", currentIds)
+                    .remove("video_data_$videoId")
+                    .apply()
+            } else {
+                currentIds.add(videoId)
+                val json = adapter.toJson(video)
+                prefs.edit()
+                    .putStringSet("bookmarked_ids", currentIds)
+                    .putString("video_data_$videoId", json)
+                    .apply()
+            }
+            loadDailymotionBookmarks()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun isDailymotionBookmarked(videoId: String): Boolean {
+        return _dailymotionBookmarks.value.contains(videoId)
+    }
+
+    fun searchDailymotion(query: String, category: String, isIslamicFilter: Boolean) {
+        _isDailymotionLoading.value = true
+        _dailymotionSearchResults.value = emptyList()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val results = com.example.service.DailymotionApiClient.searchVideos(
+                    context = context,
+                    query = query,
+                    category = category,
+                    isIslamicFilter = isIslamicFilter
+                )
+                _dailymotionSearchResults.value = results
+            } catch (e: Exception) {
+                android.util.Log.e("IbadahViewModel", "Error searching Dailymotion", e)
+            } finally {
+                _isDailymotionLoading.value = false
+            }
+        }
+    }
+
+    fun loadRelatedDailymotionVideos(videoId: String) {
+        _relatedDailymotionVideos.value = emptyList()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val results = com.example.service.DailymotionApiClient.getRelatedVideos(videoId)
+                _relatedDailymotionVideos.value = results
+            } catch (e: Exception) {
+                android.util.Log.e("IbadahViewModel", "Error loading related videos", e)
+            }
+        }
     }
 }
 

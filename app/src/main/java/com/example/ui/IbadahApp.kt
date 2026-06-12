@@ -29,8 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -6117,6 +6121,41 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
     val youtubeResults by viewModel.youtubeSearchResults.collectAsState()
     val isYoutubeLoading by viewModel.isYoutubeLoading.collectAsState()
 
+    // ==============================================================================
+    // DAILYMOTION STATES
+    // ==============================================================================
+    var activeMediaPlatform by remember { mutableStateOf("youtube") } // "youtube", "dailymotion"
+    var activeDailymotionVideoState by remember { mutableStateOf<com.example.data.DailymotionVideo?>(null) }
+    var dailymotionSubSection by remember { mutableStateOf("waz") } // "waz", "quran", "nasheed", "dua"
+    var dailymotionSearchQuery by remember { mutableStateOf("") }
+    var isIslamicFilter by remember { mutableStateOf(true) }
+    var dailymotionTab by remember { mutableStateOf("search") } // "search", "bookmarks"
+
+    val dailymotionResults by viewModel.dailymotionSearchResults.collectAsState()
+    val isDailymotionLoading by viewModel.isDailymotionLoading.collectAsState()
+    val bookmarkedDailymotionVideos by viewModel.dailymotionBookmarkedVideos.collectAsState()
+
+    // Trigger Dailymotion Search dynamically
+    LaunchedEffect(activeMediaPlatform, dailymotionSubSection, dailymotionSearchQuery, isIslamicFilter, dailymotionTab) {
+        if (activeMediaPlatform == "dailymotion" && dailymotionTab == "search") {
+            viewModel.searchDailymotion(
+                query = dailymotionSearchQuery,
+                category = dailymotionSubSection,
+                isIslamicFilter = isIslamicFilter
+            )
+        }
+    }
+
+    if (activeDailymotionVideoState != null) {
+        com.example.ui.InAppDailymotionPlayerDialog(
+            video = activeDailymotionVideoState!!,
+            viewModel = viewModel,
+            relatedVideos = emptyList(),
+            isBn = isBn,
+            onDismiss = { activeDailymotionVideoState = null }
+        )
+    }
+
     if (activeYoutubeId.isNotEmpty()) {
         BackHandler {
             activeYoutubeId = ""
@@ -6129,12 +6168,10 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
         }
     }
 
-    // Custom media subsection tracks - defaulted to "waz" which is what user requested
     var mediaSubSection by remember { mutableStateOf("waz") } // "waz", "quran", "quran_translation", "nasheed", "video" (Live TV), "dua"
     var searchQuery by remember { mutableStateOf("") }
     var visibleItemCount by remember { mutableStateOf(15) }
 
-    // List of Live TV & Radio channels with 100% sacred Islamic images
     val liveChannels = listOf(
         com.example.data.IslamicVideo(
             id = "live_makkah",
@@ -6174,18 +6211,27 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
         )
     )
 
-    // Real-time automatic search observer on category or user typing
-    LaunchedEffect(mediaSubSection, searchQuery) {
+    var selectedTrustedChannelTab by remember { mutableStateOf("all") } // "all" (All Videos), "merciful", "one_islam", "peace"
+
+    // Real-time automatic search observer on category, selected channel tab, or user typing
+    LaunchedEffect(selectedTrustedChannelTab, mediaSubSection, searchQuery) {
         if (mediaSubSection != "video") {
             val queryToSearch = if (searchQuery.isNotBlank()) {
                 searchQuery
             } else {
-                when (mediaSubSection) {
-                    "waz" -> "islamic waz bangla"
-                    "quran" -> "quran recitation soothing"
-                    "quran_translation" -> "quran bangla anubad"
-                    "nasheed" -> "beautiful emotional nasheed"
-                    else -> "daily duas and azkar"
+                when (selectedTrustedChannelTab) {
+                    "merciful" -> "MercifulServant reminders"
+                    "one_islam" -> "One Islam Productions lectures dawah"
+                    "peace" -> "Peace TV lecture Dr Zakir Naik"
+                    else -> {
+                        when (mediaSubSection) {
+                            "waz" -> "islamic waz bangla"
+                            "quran" -> "quran recitation soothing"
+                            "quran_translation" -> "quran bangla anubad"
+                            "nasheed" -> "beautiful emotional nasheed"
+                            else -> "daily duas and azkar"
+                        }
+                    }
                 }
             }
             viewModel.searchYoutube(queryToSearch)
@@ -6197,13 +6243,449 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        
-        // UNIFIED VIDEO-CENTRIC ISLAMIC MEDIA CENTER (NO AUDIO COLLECTION, ALL VIDEO!)
-        Column(modifier = Modifier.fillMaxSize()) {
-            
-            // 1. UNIFIED VIDEO PLAYERS
+        // --- High-Level Platforms Segment Header ---
+        TabRow(
+            selectedTabIndex = if (activeMediaPlatform == "youtube") 0 else 1,
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 12.dp)
+        ) {
+            Tab(
+                selected = activeMediaPlatform == "youtube",
+                onClick = { activeMediaPlatform = "youtube" },
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isBn) "ইউটিউব মিডিয়া" else "YouTube Hub",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            )
+            Tab(
+                selected = activeMediaPlatform == "dailymotion",
+                onClick = { activeMediaPlatform = "dailymotion" },
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VideoLibrary,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isBn) "ডেইলি-মোশন হাব" else "Dailymotion Hub",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            )
+        }
 
-            // (A) YouTube Video Player Dialog (Native IFrame SDK Custom view with related feed)
+        if (activeMediaPlatform == "youtube") {
+            Column(modifier = Modifier.fillMaxSize()) {
+
+            // --- TRUSTED ISLAMIC CHANNELS MODE PORTAL ---
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                ),
+                border = BorderStroke(1.dp, SoftGoldBorder.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = null,
+                            tint = SoftGoldBorder,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isBn) "বিশ্বস্ত ইসলামিক চ্যানেল মোড" else "Trusted Islamic Channels Mode",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    ScrollableTabRow(
+                        selectedTabIndex = when (selectedTrustedChannelTab) {
+                            "all" -> 0
+                            "merciful" -> 1
+                            "one_islam" -> 2
+                            "peace" -> 3
+                            else -> 0
+                        },
+                        containerColor = Color.Transparent,
+                        edgePadding = 0.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Tab(
+                            selected = selectedTrustedChannelTab == "all",
+                            onClick = { selectedTrustedChannelTab = "all" },
+                            text = { Text(if (isBn) "সকল ভিডিও" else "All Videos", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        )
+                        Tab(
+                            selected = selectedTrustedChannelTab == "merciful",
+                            onClick = { selectedTrustedChannelTab = "merciful" },
+                            text = { Text("MercifulServant", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        )
+                        Tab(
+                            selected = selectedTrustedChannelTab == "one_islam",
+                            onClick = { selectedTrustedChannelTab = "one_islam" },
+                            text = { Text("One Islam", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        )
+                        Tab(
+                            selected = selectedTrustedChannelTab == "peace",
+                            onClick = { selectedTrustedChannelTab = "peace" },
+                            text = { Text("Peace TV", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                }
+            }
+
+            // Show general category filter chips ONLY if 'All Videos' tab is selected!
+            if (selectedTrustedChannelTab == "all") {
+                // 2. CATEGORY HORIZONTAL FILTER CHIPS (ALL UNDER VIDEO PARADIGM!)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(bottom = 10.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = mediaSubSection == "waz",
+                            onClick = { mediaSubSection = "waz" },
+                            label = { Text(if (isBn) "🎙️ ওয়াজ কালেকশন" else "🎙️ Waz Collection", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = mediaSubSection == "quran",
+                            onClick = { mediaSubSection = "quran" },
+                            label = { Text(if (isBn) "📖 আল-কোরআন তিলাওয়াত" else "📖 Quran Recitation", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = mediaSubSection == "quran_translation",
+                            onClick = { mediaSubSection = "quran_translation" },
+                            label = { Text(if (isBn) "🔊 কোরআন তিলাওয়াত তরজমা" else "🔊 Quran Sura Translation", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = mediaSubSection == "nasheed",
+                            onClick = { mediaSubSection = "nasheed" },
+                            label = { Text(if (isBn) "🎵 ইসলামিক গজল" else "🎵 Islamic Gojals", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = mediaSubSection == "video",
+                            onClick = { mediaSubSection = "video" },
+                            label = { Text(if (isBn) "📺 লাইভ মক্কা/মদিনা ও টিভি" else "📺 Live TV Channels", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = mediaSubSection == "dua",
+                            onClick = { mediaSubSection = "dua" },
+                            label = { Text(if (isBn) "🤲 দোআ ও আমল ভিডিও" else "🤲 Dua & Amal Videos", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+
+            // 3. YOUTUBE-STYLE SEARCH BAR
+            val placeholderText = if (selectedTrustedChannelTab != "all") {
+                if (isBn) "চ্যানেলের বিষয়বস্তু খুঁজুন..." else "Search within this channel..."
+            } else {
+                when (mediaSubSection) {
+                    "waz" -> if (isBn) "ওয়াজের স্পিকার বা বিষয় সার্চ করুন (যেমন: আহমাদুল্লাহ)" else "Search Waz speaker or topic..."
+                    "quran" -> if (isBn) "কুরআন তিলাওয়াত কারী বা সূরা সার্চ করুন..." else "Search Quran Reciters or Surah..."
+                    "quran_translation" -> if (isBn) "কুরআন বঙ্গানুবাদ বা সূরা খুঁজুন..." else "Search Quran Bengli translation..."
+                    "nasheed" -> if (isBn) "ইসলামিক গজলের নাম বা শিল্পী সার্চ করুন..." else "Search Islamic Gojol or Nasheed artist..."
+                    "video" -> if (isBn) "লাইভ সম্প্রচার চ্যানেল সার্চ করুন..." else "Search live TV channels..."
+                    else -> if (isBn) "প্রয়োজনীয় দোয়া ও আমল ভিডিও সার্চ করুন..." else "Search daily Duas & Azkar..."
+                }
+            }
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text(placeholderText, fontSize = 11.sp) },
+                leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(imageVector = Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                shape = RoundedCornerShape(24.dp),
+                textStyle = MaterialTheme.typography.bodySmall,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+
+            // SMART CHANNELS PORTAL & RECOMMENDATION SECTIONS
+            if (selectedTrustedChannelTab == "all" && mediaSubSection != "video" && searchQuery.isBlank()) {
+                val recommendedVideos by viewModel.recommendedVideos.collectAsState()
+                
+                // (A) SMART RECOMMENDATIONS SECTION (Learns user preferences!)
+                if (recommendedVideos.isNotEmpty()) {
+                    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = SoftGoldBorder,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isBn) "বিশেষ সুপারিশ (স্মার্ট লার্নিং)" else "Recommended for You (Smart)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Text(
+                                text = if (isBn) "আপনার পছন্দ" else "Based on Clicks",
+                                fontSize = 9.sp,
+                                color = SoftGoldBorder,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(recommendedVideos) { recItem ->
+                                Card(
+                                    modifier = Modifier
+                                        .width(160.dp)
+                                        .clickable {
+                                            viewModel.recordVideoClick(recItem)
+                                            activeTitle = recItem.title
+                                            activeSpeaker = recItem.speaker
+                                            activeYoutubeId = recItem.youtubeId
+                                            activeStreamUrl = ""
+                                        },
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                                    border = BorderStroke(1.dp, SoftGoldBorder.copy(alpha = 0.25f)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(6.dp)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(72.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                        ) {
+                                            coil.compose.AsyncImage(
+                                                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                                    .data(recItem.thumbnail)
+                                                    .crossfade(true)
+                                                    .placeholder(com.example.R.drawable.islamic_mecca_wallpaper)
+                                                    .error(com.example.R.drawable.islamic_mecca_wallpaper)
+                                                    .fallback(com.example.R.drawable.islamic_mecca_wallpaper)
+                                                    .build(),
+                                                contentDescription = recItem.title,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomEnd)
+                                                    .padding(3.dp)
+                                                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(3.dp))
+                                                    .padding(horizontal = 3.dp, vertical = 0.5.dp)
+                                            ) {
+                                                Text(
+                                                    text = recItem.duration,
+                                                    color = Color.White,
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = recItem.title,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 9.5.sp,
+                                            maxLines = 2,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            lineHeight = 12.sp
+                                        )
+                                        Text(
+                                            text = recItem.speaker,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // (B) DEDICATED "TRUSTED CHANNELS" PORTAL LIST
+                Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VideoLibrary,
+                            contentDescription = null,
+                            tint = SoftGoldBorder,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isBn) "বিশ্বস্ত ইসলামিক চ্যানেলসমূহ" else "Explore Trusted Channels Portal",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(6.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val portalChannels = listOf(
+                            Triple("merciful", "MercifulServant", if (isBn) "রিমাইন্ডার ও তিলাওয়াত" else "Quran & Reminders"),
+                            Triple("one_islam", "One Islam", if (isBn) "দাওয়া ও লেকচার" else "Lectures & Dawah"),
+                            Triple("peace", "Peace TV", if (isBn) "প্রশ্নোত্তর ও আলোচনা" else "Q&A & Discussions")
+                        )
+                        
+                        portalChannels.forEach { (tabKey, chName, chDesc) ->
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { selectedTrustedChannelTab = tabKey },
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
+                                border = BorderStroke(1.dp, SoftGoldBorder.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Verified,
+                                        contentDescription = null,
+                                        tint = SoftGoldBorder,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = chName,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = chDesc,
+                                        fontSize = 8.sp,
+                                        color = Color.Gray,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. GENERATE RELEVANT VIDEO LIST DIRECTLY (ON-DRAG ENDLESS SCROLLING)
+            val targetVideos = remember(mediaSubSection, selectedTrustedChannelTab, searchQuery, youtubeResults) {
+                if (selectedTrustedChannelTab == "all" && mediaSubSection == "video") {
+                    if (searchQuery.isBlank()) liveChannels else {
+                        liveChannels.filter {
+                            it.title.lowercase().contains(searchQuery.lowercase()) ||
+                            it.speaker.lowercase().contains(searchQuery.lowercase())
+                        }
+                    }
+                } else {
+                    youtubeResults
+                }
+            }
+
+            val isListLoadingToShow = if (selectedTrustedChannelTab == "all" && mediaSubSection == "video") false else isYoutubeLoading
             if (activeYoutubeId.isNotEmpty()) {
                 InAppYoutubePlayerDialog(
                     videoId = activeYoutubeId,
@@ -6211,7 +6693,10 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                     videoSpeaker = activeSpeaker,
                     relatedVideos = youtubeResults,
                     isBn = isBn,
-                    onDismiss = { activeYoutubeId = "" }
+                    onDismiss = { activeYoutubeId = "" },
+                    onVideoBlocked = { blockedId ->
+                        viewModel.removeVideoFromResults(blockedId)
+                    }
                 )
             }
 
@@ -6337,187 +6822,62 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-                // 2. CATEGORY HORIZONTAL FILTER CHIPS (ALL UNDER VIDEO PARADIGM!)
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(bottom = 10.dp)
-                ) {
-                    item {
-                        FilterChip(
-                            selected = mediaSubSection == "waz",
-                            onClick = { mediaSubSection = "waz" },
-                            label = { Text(if (isBn) "🎙️ ওয়াজ কালেকশন" else "🎙️ Waz Collection", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = mediaSubSection == "quran",
-                            onClick = { mediaSubSection = "quran" },
-                            label = { Text(if (isBn) "📖 আল-কোরআন তিলাওয়াত" else "📖 Quran Recitation", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = mediaSubSection == "quran_translation",
-                            onClick = { mediaSubSection = "quran_translation" },
-                            label = { Text(if (isBn) "🔊 কোরআন তিলাওয়াত তরজমা" else "🔊 Quran Sura Translation", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = mediaSubSection == "nasheed",
-                            onClick = { mediaSubSection = "nasheed" },
-                            label = { Text(if (isBn) "🎵 ইসলামিক গজল" else "🎵 Islamic Gojals", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = mediaSubSection == "video",
-                            onClick = { mediaSubSection = "video" },
-                            label = { Text(if (isBn) "📺 লাইভ মক্কা/মদিনা ও টিভি" else "📺 Live TV Channels", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = mediaSubSection == "dua",
-                            onClick = { mediaSubSection = "dua" },
-                            label = { Text(if (isBn) "🤲 দোআ ও আমল ভিডিও" else "🤲 Dua & Amal Videos", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                }
-
-                // 3. YOUTUBE-STYLE SEARCH BAR
-                val placeholderText = when (mediaSubSection) {
-                    "waz" -> if (isBn) "ওয়াজের স্পিকার বা বিষয় সার্চ করুন (যেমন: আহমাদুল্লাহ)" else "Search Waz speaker or topic..."
-                    "quran" -> if (isBn) "কুরআন তিলাওয়াত কারী বা সূরা সার্চ করুন..." else "Search Quran Reciters or Surah..."
-                    "quran_translation" -> if (isBn) "কুরআন বঙ্গানুবাদ বা সূরা খুঁজুন..." else "Search Quran Bengli translation..."
-                    "nasheed" -> if (isBn) "ইসলামিক গজলের নাম বা শিল্পী সার্চ করুন..." else "Search Islamic Gojol or Nasheed artist..."
-                    "video" -> if (isBn) "লাইভ সম্প্রচার চ্যানেল সার্চ করুন..." else "Search live TV channels..."
-                    else -> if (isBn) "প্রয়োজনীয় দোয়া ও আমল ভিডিও সার্চ করুন..." else "Search daily Duas & Azkar..."
-                }
-
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(placeholderText, fontSize = 11.sp) },
-                    leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(imageVector = Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    },
+            if (isListLoadingToShow) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-
-                // 4. GENERATE RELEVANT VIDEO LIST DIRECTLY (ON-DRAG ENDLESS SCROLLING)
-                val targetVideos = remember(mediaSubSection, searchQuery, youtubeResults) {
-                    if (mediaSubSection == "video") {
-                        if (searchQuery.isBlank()) liveChannels else {
-                            liveChannels.filter {
-                                it.title.lowercase().contains(searchQuery.lowercase()) ||
-                                it.speaker.lowercase().contains(searchQuery.lowercase())
-                            }
-                        }
-                    } else {
-                        youtubeResults
-                    }
-                }
-
-                val isListLoadingToShow = if (mediaSubSection == "video") false else isYoutubeLoading
-
-                if (isListLoadingToShow) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(38.dp),
-                                strokeWidth = 3.5.dp
-                            )
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Text(
-                                text = if (isBn) "ইউটিউব সার্ভার থেকে ভিডিও লোড করা হচ্ছে..." else "Loading latest YouTube feeds...",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                } else if (targetVideos.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(38.dp),
+                            strokeWidth = 3.5.dp
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = if (isBn) "দুঃখিত! অনুসন্ধান অনুযায়ী কোনো ভিডিও পাওয়া যায়নি।" else "No videos found for this search.",
-                            color = Color.Gray,
+                            text = if (isBn) "ইউটিউব সার্ভার থেকে ভিডিও লোড করা হচ্ছে..." else "Loading latest YouTube feeds...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-                        items(
-                            items = targetVideos,
-                            key = { it.id }
-                        ) { item ->
-                            val isCurrentSelection = if (item.youtubeId.isNotEmpty()) activeYoutubeId == item.youtubeId else activeStreamUrl == item.videoUrl
+                }
+            } else if (targetVideos.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isBn) "দুঃখিত! অনুসন্ধান অনুযায়ী কোনো ভিডিও পাওয়া যায়নি।" else "No videos found for this search.",
+                        color = Color.Gray,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    items(
+                        items = targetVideos,
+                        key = { it.id }
+                    ) { item ->
+                        val isCurrentSelection = if (item.youtubeId.isNotEmpty()) activeYoutubeId == item.youtubeId else activeStreamUrl == item.videoUrl
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
+                                        viewModel.recordVideoClick(item)
                                         activeTitle = item.title
                                         activeSpeaker = item.speaker
                                         if (item.youtubeId.isNotEmpty()) {
@@ -6656,8 +7016,304 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                     }
                 }
             }
+        } else {
+            // ==============================================================================
+            // DAILYMOTION MEDIA SYSTEM SECTION
+            // ==============================================================================
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Secondary level Tab row for search explores vs favorite collection
+                TabRow(
+                    selectedTabIndex = if (dailymotionTab == "search") 0 else 1,
+                    containerColor = Color.Transparent,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Tab(
+                        selected = dailymotionTab == "search",
+                        onClick = { dailymotionTab = "search" },
+                        text = { Text(if (isBn) "🔍 নতুন সন্ধান করুন" else "🔍 Explore Videos", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    )
+                    Tab(
+                        selected = dailymotionTab == "bookmarks",
+                        onClick = { dailymotionTab = "bookmarks" },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(imageVector = Icons.Default.Star, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFFFFD700))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (isBn) "⭐ প্রিয় তালিকা (${bookmarkedDailymotionVideos.size})" else "⭐ Favorites (${bookmarkedDailymotionVideos.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    )
+                }
+
+                if (dailymotionTab == "search") {
+                    // Safe filter & category rows
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isBn) "ইসলামিক সেফ ফিল্টার" else "Islamic Safe Filter",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        androidx.compose.material3.Switch(
+                            checked = isIslamicFilter,
+                            onCheckedChange = { isIslamicFilter = it },
+                            modifier = Modifier.scale(0.8f)
+                        )
+                    }
+
+                    // Category horizontal chips
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = dailymotionSubSection == "waz",
+                                onClick = { dailymotionSubSection = "waz" },
+                                label = { Text(if (isBn) "🎙️ ওয়াজ কালেকশন" else "🎙️ Waz Collection", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = dailymotionSubSection == "quran",
+                                onClick = { dailymotionSubSection = "quran" },
+                                label = { Text(if (isBn) "📖 আল-কোরআন তিলাওয়াত" else "📖 Quran Recitation", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = dailymotionSubSection == "nasheed",
+                                onClick = { dailymotionSubSection = "nasheed" },
+                                label = { Text(if (isBn) "🎵 ইসলামিক গজল" else "🎵 Islamic Gojals", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = dailymotionSubSection == "dua",
+                                onClick = { dailymotionSubSection = "dua" },
+                                label = { Text(if (isBn) "🤲 দোআ ও আমল" else "🤲 Dua & Amal", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+
+                    // Search input text field
+                    OutlinedTextField(
+                        value = dailymotionSearchQuery,
+                        onValueChange = { dailymotionSearchQuery = it },
+                        placeholder = { Text(if (isBn) "সার্চ করুন..." else "Search keyword...", fontSize = 11.sp) },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
+                        trailingIcon = {
+                            if (dailymotionSearchQuery.isNotEmpty()) {
+                                IconButton(onClick = { dailymotionSearchQuery = "" }) {
+                                    Icon(imageVector = Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+
+                    // Results content list
+                    if (isDailymotionLoading) {
+                        Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                    } else if (dailymotionResults.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().weight(1f).padding(24.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (isBn) "কোনো সার্চ রেজাল্ট পাওয়া যায়নি। অনুগ্রহ করে অন্য কিছু খুঁজুন। (ডেইলি-মোশন অফলাইনেও পছন্দের তালিকা দেখতে পারবেন)" else "No videos found. Try a different query. (Offline bookmarks supported)",
+                                color = Color.Gray,
+                                fontSize = 12.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth().weight(1f)
+                        ) {
+                            items(dailymotionResults) { item ->
+                                DailymotionVideoRowCard(
+                                    video = item,
+                                    isBn = isBn,
+                                    viewModel = viewModel,
+                                    onClick = { activeDailymotionVideoState = item }
+                                )
+                            }
+                        }
+                    }
+
+                } else {
+                    // BOOKMARKS/FAVORITES VIEW
+                    if (bookmarkedDailymotionVideos.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize().padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = Color.Gray.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = if (isBn) "আপনার প্রিয় তালিকায় কোনো ডেইলি-মোশন ভিডিও এখনো যোগ করা হয়নি।" else "No Dailymotion videos bookmarked yet.",
+                                    color = Color.Gray,
+                                    fontSize = 12.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp)
+                        ) {
+                            items(bookmarkedDailymotionVideos) { item ->
+                                DailymotionVideoRowCard(
+                                    video = item,
+                                    isBn = isBn,
+                                    viewModel = viewModel,
+                                    onClick = { activeDailymotionVideoState = item }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+@Composable
+fun DailymotionVideoRowCard(
+    video: com.example.data.DailymotionVideo,
+    isBn: Boolean,
+    viewModel: IbadahViewModel,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val bookmarks by viewModel.dailymotionBookmarks.collectAsState()
+    val isCurrBookmarked = bookmarks.contains(video.id)
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 110.dp, height = 68.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(video.thumbnail)
+                        .crossfade(true)
+                        .placeholder(com.example.R.drawable.islamic_mecca_wallpaper)
+                        .error(com.example.R.drawable.islamic_mecca_wallpaper)
+                        .build(),
+                    contentDescription = video.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp)
+                        .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = video.durationString,
+                        color = Color.White,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = video.title,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = video.channelName,
+                        color = SoftGoldBorder,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { viewModel.toggleDailymotionBookmark(video) },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "Bookmark",
+                            tint = if (isCurrBookmarked) Color(0xFFFFD700) else Color.Gray.copy(alpha = 0.5f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 // standalone generator function for endless videos recommendations
 private fun generateIslamicVideos(category: String, query: String, count: Int, isBn: Boolean): List<com.example.data.IslamicVideo> {
