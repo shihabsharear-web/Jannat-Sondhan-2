@@ -412,7 +412,7 @@ class IbadahCurrentPrayerWidgetProvider : AppWidgetProvider() {
                 } else {
                     views.setTextViewText(R.id.current_widget_status_sub, "পবিত্র $activeName ওয়াক্ত চলমান")
                     views.setTextColor(R.id.current_widget_status_sub, 0xFF81C784.toInt())
-                    views.setInt(R.id.current_widget_forbidden_banner_box, "setBackgroundResource", R.drawable.widget_sub_card_bg)
+                    views.setInt(R.id.current_widget_forbidden_banner_box, "setBackgroundResource", R.drawable.widget_forbidden_bg)
                     
                     views.setTextViewText(R.id.current_widget_forbidden_banner_title, "আসন্ন নিষিদ্ধ নামাজের সময়সূচী")
                     views.setTextColor(R.id.current_widget_forbidden_banner_title, 0xFFD4AF37.toInt())

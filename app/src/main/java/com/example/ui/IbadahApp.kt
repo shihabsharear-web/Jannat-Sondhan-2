@@ -814,7 +814,7 @@ fun IbadahApp(viewModel: IbadahViewModel) {
                         2 -> QuranTabScreen(viewModel, isBn)
                         3 -> CompassDhikrTabScreen(viewModel, isBn)
                         4 -> ToolsRamadanTabScreen(viewModel, isBn)
-                        5 -> LiveAiTabScreen(viewModel, isBn)
+                        5 -> IslamicLiveMediaCenter(viewModel, isBn)
                         6 -> SettingsNoticeTabScreen(viewModel, isBn)
                     }
                 }
@@ -955,36 +955,36 @@ fun QuickActionItem(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, Color(0xFFF1F5F9)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp, horizontal = 4.dp),
+                .padding(vertical = 14.dp, horizontal = 6.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(SoftMintBg),
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
-                    tint = EmeraldMedium,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = label,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = EmeraldDeep,
+                color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -3273,7 +3273,6 @@ fun HomeDashboardView(
 
                 // 4b. Special Premium Card: ইসলামিক কুইজ (Islamic Quiz)
                 item {
-                    Spacer(modifier = Modifier.height(12.dp))
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()

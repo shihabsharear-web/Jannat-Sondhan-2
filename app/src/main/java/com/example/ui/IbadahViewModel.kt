@@ -12,6 +12,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
 import com.example.service.GeminiApiClient
+import com.example.service.FirebaseMediaCenterBackend
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -1000,6 +1001,165 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
      val allIslamicAudios = IslamicData.getAudioCollectionsWithDailyExtras()
 
      val exoPlayerManager = IbadahExoPlayerManager(context)
+
+     val firebaseMediaBackend = FirebaseMediaCenterBackend(context)
+
+     val customIslamicLiveStreams = listOf(
+         IbadahMediaStream(
+             id = "live_makkah",
+             titleBn = "মক্কা লাইভ সরাসরি (কাবা শরীফ)",
+             titleEn = "Saudi Quran Live Makkah",
+             subtitleBn = "মক্কা থেকে ২৪ ঘণ্টা সরাসরি সম্প্রচার",
+             subtitleEn = "24/7 stream live from Kaaba, Mecca",
+             streamUrl = "https://win.holol.com/live/quran/playlist.m3u8",
+             thumbnail = "https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&q=80&w=400",
+             isVideo = true,
+             category = "live_tv"
+         ),
+         IbadahMediaStream(
+             id = "live_madinah",
+             titleBn = "মদিনা লাইভ সরাসরি (মসজিদে নববী)",
+             titleEn = "Saudi Sunnah Live Madinah",
+             subtitleBn = "মদিনা থেকে ২৪ ঘণ্টা সরাসরি সম্প্রচার",
+             subtitleEn = "24/7 stream live from Prophet's Mosque",
+             streamUrl = "https://win.holol.com/live/sunnah/playlist.m3u8",
+             thumbnail = "https://images.unsplash.com/photo-1597935258735-e254c1839512?auto=format&fit=crop&q=80&w=400",
+             isVideo = true,
+             category = "live_tv"
+         ),
+         IbadahMediaStream(
+             id = "live_quran_tv",
+             titleBn = "আল কুরআন টিভি সরাসরি সম্প্রচার",
+             titleEn = "Al Quran TV Live Stream",
+             subtitleBn = "পবিত্র কুরআনের ২৪ ঘণ্টা লাইভ তিলাওয়াত ও অনুবাদ",
+             subtitleEn = "24/7 recitation and visual subtitles",
+             streamUrl = "https://sdn-global-live-sponsorship.akamaized.net/hls/live/2004246/sauditv5/master.m3u8",
+             thumbnail = "https://images.unsplash.com/photo-1609599006353-e629f1d50218?auto=format&fit=crop&q=80&w=400",
+             isVideo = true,
+             category = "live_tv"
+         ),
+         IbadahMediaStream(
+             id = "live_tv_saudi",
+             titleBn = "সৌদি টিভি ৫ লাইভ (হজ্জ সরাসরি)",
+             titleEn = "Saudi Custom Quran TV",
+             subtitleBn = "সৌদি সরকারের হজ্জ ও ওমরাহ ফিড",
+             subtitleEn = "Saudi Arabia live visual feeds",
+             streamUrl = "https://sdn-global-live-sponsorship.akamaized.net/hls/live/2004246/sauditv5/master.m3u8",
+             thumbnail = "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&q=80&w=400",
+             isVideo = true,
+             category = "tv_channels"
+         ),
+         IbadahMediaStream(
+             id = "live_tv_sharjah",
+             titleBn = "শারজাহ কুরআন রেডিও টিভি",
+             titleEn = "Sharjah Quran TV Live",
+             subtitleBn = "শারজাহ কুরআন চ্যানেলের বিখ্যাত সম্প্রচার",
+             subtitleEn = "Uae prestigious visual recitation feed",
+             streamUrl = "https://sba-live.shm.ae/hls/shjquran.m3u8",
+             thumbnail = "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=400",
+             isVideo = true,
+             category = "tv_channels"
+         ),
+         IbadahMediaStream(
+             id = "radio_quran_sa",
+             titleBn = "পবিত্র কুরআন রেডিও (রিয়াদ)",
+             titleEn = "Holy Quran Riyadh Radio",
+             subtitleBn = "সৌদি আরবের জনপ্রিয় মূল কুরআন প্রচার কেন্দ্র",
+             subtitleEn = "Prestigious 24/7 Riyadh Quran Broadcast",
+             streamUrl = "https://stream.radiojar.com/8s5u8v77v",
+             thumbnail = "https://images.unsplash.com/photo-1609599006353-e629f1d50218?auto=format&fit=crop&q=80&w=200",
+             isVideo = false,
+             category = "quran_radio"
+         ),
+         IbadahMediaStream(
+             id = "radio_alafasy",
+             titleBn = "কারি মিশারি আল-আফাসি রেডিও",
+             titleEn = "Sheikh Alafasy Radio",
+             subtitleBn = "মিশারি রাশিদ আল আফাসির সুরেলা কণ্ঠে তিলাওয়াত",
+             subtitleEn = "Continuous Mishary Alafasy beautiful voice",
+             streamUrl = "https://qurango.net/radio/alafasy",
+             thumbnail = "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&q=80&w=200",
+             isVideo = false,
+             category = "quran_radio"
+         ),
+         IbadahMediaStream(
+             id = "radio_maher",
+             titleBn = "কারি মাহের আল-মুআইকিলী রেডিও",
+             titleEn = "Sheikh Maher Al-Muaiqly",
+             subtitleBn = "কাবা শরিফের শ্রদ্ধেয় ইমামের চমৎকার তিলাওয়াত",
+             subtitleEn = "Prestige recitation of Holy Kaaba Imam",
+             streamUrl = "https://qurango.net/radio/maher",
+             thumbnail = "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&q=80&w=200",
+             isVideo = false,
+             category = "quran_radio"
+         ),
+         IbadahMediaStream(
+             id = "radio_bn_quran",
+             titleBn = "বাংলা অনুবাদসহ পবিত্র কুরআন রেডিও",
+             titleEn = "Bangla Quran Radio with Translation",
+             subtitleBn = "প্রতিটি আয়াতের বাংলা অর্থসহ সার্বক্ষণিক কুরআন তিলাওয়াত",
+             subtitleEn = "Soothing Quranic audio with Bengali translation",
+             streamUrl = "https://stream.zeno.fm/f9t78kv86h8tv",
+             thumbnail = "https://images.unsplash.com/photo-1609599006353-e629f1d50218?auto=format&fit=crop&q=80&w=200",
+             isVideo = false,
+             category = "bangla_radio"
+         ),
+         IbadahMediaStream(
+             id = "radio_bn_talk",
+             titleBn = "ইসলামিক আলোচনা রেডিও বাংলাদেশ",
+             titleEn = "Islamic Talk Bangla Feed",
+             subtitleBn = "দেশ-বিদেশের প্রখ্যাত ওলামাদের বাংলা আলোচনা ও ফতোয়া",
+             subtitleEn = "Valuable dawah discussion and Quran lessons",
+             streamUrl = "https://stream.zeno.fm/088tbgn86h8tv",
+             thumbnail = "https://images.unsplash.com/photo-1590076211181-7640c427f71b?auto=format&fit=crop&q=80&w=200",
+             isVideo = false,
+             category = "bangla_radio"
+         ),
+         IbadahMediaStream(
+             id = "radio_ar_cairo",
+             titleBn = "পবিত্র কুরআন রেডিও কায়রো",
+             titleEn = "Radio Cairo Quran Egypt",
+             subtitleBn = "মিশরের কায়রো থেকে সম্প্রচারিত ঐতিহ্যবাহী তিলাওয়াত",
+             subtitleEn = "Historic Cairo Quran station, classic recordings",
+             streamUrl = "https://stream.zeno.fm/088tbgn86h8tv",
+             thumbnail = "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&q=80&w=200",
+             isVideo = false,
+             category = "arabic_radio"
+         ),
+         IbadahMediaStream(
+             id = "radio_ar_basit",
+             titleBn = "কারী আব্দুল বাসেত চমৎকার রেডিও",
+             titleEn = "Sheikh Abdul Basit Radio",
+             subtitleBn = "কিংবদন্তি ক্বারী আব্দুল বাসেত আব্দুস সামাদের তিলাওয়াত",
+             subtitleEn = "Legendary warm golden voice recitation",
+             streamUrl = "https://qurango.net/radio/basit",
+             thumbnail = "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&q=80&w=200",
+             isVideo = false,
+             category = "arabic_radio"
+         ),
+         IbadahMediaStream(
+             id = "radio_en_trans",
+             titleBn = "ইংরেজি অনুবাদসহ কুরআন রেডিও",
+             titleEn = "English Translation Quran Radio",
+             subtitleBn = "সম্পূর্ণ ইংরেজী অর্থসহ ধারাবাহিক কুরআন প্রচার",
+             subtitleEn = "Complete sequential translation, crystal clear",
+             streamUrl = "https://qurango.net/radio/translation_english",
+             thumbnail = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=200",
+             isVideo = false,
+             category = "int_radio"
+         ),
+         IbadahMediaStream(
+             id = "radio_en_lectures",
+             titleBn = "আন্তর্জাতিক ইসলামিক লেকচার রেডিও",
+             titleEn = "International Lectures English",
+             subtitleBn = "বিশ্বখ্যাত ইসলামিক পণ্ডিতদের তথ্যবহুল ইংরেজি আলোচনা",
+             subtitleEn = "Lectures of top international scholars on demand",
+             streamUrl = "https://stream.zeno.fm/7epv1zcbh0tuv",
+             thumbnail = "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&q=80&w=200",
+             isVideo = false,
+             category = "int_radio"
+         )
+     )
 
      private val _playingAudioItem = MutableStateFlow<IslamicAudioItem?>(null)
      val playingAudioItem: StateFlow<IslamicAudioItem?> = _playingAudioItem.asStateFlow()

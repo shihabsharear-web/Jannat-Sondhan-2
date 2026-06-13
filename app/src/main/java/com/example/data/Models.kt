@@ -178,3 +178,18 @@ data class DailymotionVideo(
     val createdTime: Long = 0L
 )
 
+data class IbadahMediaStream(
+    val id: String,
+    val titleBn: String,
+    val titleEn: String,
+    val subtitleBn: String,
+    val subtitleEn: String,
+    val streamUrl: String,
+    val thumbnail: String,
+    val isVideo: Boolean,
+    val format: String = "m3u8", // m3u8, mpd, mp4, mp3, aac
+    val category: String, // live_tv, tv_channels, quran_radio, bangla_radio, arabic_radio, int_radio
+    val duration: String = "Live"
+)
+
+

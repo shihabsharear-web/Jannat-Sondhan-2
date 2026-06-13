@@ -63,16 +63,14 @@ object DailymotionApiClient {
             val originalRequest = chain.request()
             val originalUrl = originalRequest.url
 
-            // To support multiple possible custom keys, pass in all formats
+            // To support multiple possible custom keys, pass in all formats safely without breaking OAuth schemas
             val newUrl = originalUrl.newBuilder()
                 .addQueryParameter("apiKey", API_KEY)
                 .addQueryParameter("api_key", API_KEY)
-                .addQueryParameter("access_token", API_KEY)
                 .build()
 
             val newRequest = originalRequest.newBuilder()
                 .url(newUrl)
-                .header("Authorization", "Bearer $API_KEY")
                 .header("x-api-key", API_KEY)
                 .header("api-key", API_KEY)
                 .build()
@@ -167,16 +165,16 @@ object DailymotionApiClient {
         if (isIslamicFilter) {
             when (category) {
                 "waz" -> {
-                    parts.add("islamic waz bangla")
+                    parts.add("waz bangla")
                 }
                 "quran" -> {
-                    parts.add("quran recitation soothing")
+                    parts.add("quran recitation")
                 }
                 "nasheed" -> {
-                    parts.add("beautiful nasheed gojal")
+                    parts.add("islamic nasheed")
                 }
                 "dua" -> {
-                    parts.add("duas azkar prayer")
+                    parts.add("islamic dua")
                 }
                 else -> {
                     parts.add("islamic")
@@ -184,10 +182,10 @@ object DailymotionApiClient {
             }
         } else {
             when (category) {
-                "waz" -> parts.add("waz bn")
-                "quran" -> parts.add("recitation surah")
-                "nasheed" -> parts.add("nasheed gojal")
-                "dua" -> parts.add("dua islamic")
+                "waz" -> parts.add("waz")
+                "quran" -> parts.add("quran")
+                "nasheed" -> parts.add("nasheed")
+                "dua" -> parts.add("dua")
             }
         }
         

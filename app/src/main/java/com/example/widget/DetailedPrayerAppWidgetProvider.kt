@@ -505,7 +505,7 @@ class DetailedPrayerAppWidgetProvider : AppWidgetProvider() {
                 } else {
                     views.setTextViewText(R.id.detailed_widget_status_sub, "পবিত্র $activeWaqt ওয়াক্ত চলমান")
                     views.setTextColor(R.id.detailed_widget_status_sub, 0xFF81C784.toInt())
-                    views.setInt(R.id.detailed_widget_forbidden_banner_box, "setBackgroundResource", R.drawable.widget_sub_card_bg)
+                    views.setInt(R.id.detailed_widget_forbidden_banner_box, "setBackgroundResource", R.drawable.widget_forbidden_bg)
                     views.setTextColor(R.id.detailed_widget_countdown_title, 0xFFD4AF37.toInt())
                 }
 

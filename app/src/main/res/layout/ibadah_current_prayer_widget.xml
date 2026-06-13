@@ -5,13 +5,13 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg_shape"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:padding="8dp">
 
     <!-- Header Section (App Name left, City on right) -->
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="5dp">
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -61,9 +61,9 @@
         android:layout_height="wrap_content"
         android:background="@drawable/widget_sub_card_bg"
         android:orientation="horizontal"
-        android:padding="10dp"
+        android:padding="6dp"
         android:baselineAligned="false"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="5dp">
 
         <!-- Current Prayer Section -->
         <LinearLayout
@@ -179,12 +179,13 @@
 
     <!-- Countdown Progress Section (like app) -->
     <LinearLayout
+        android:id="@+id/current_widget_countdown_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/widget_sub_card_bg"
+        android:background="@drawable/widget_forbidden_bg"
         android:orientation="vertical"
-        android:padding="8dp"
-        android:layout_marginBottom="8dp">
+        android:padding="6dp"
+        android:layout_marginBottom="5dp">
 
         <RelativeLayout
             android:layout_width="match_parent"
@@ -228,7 +229,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:weightSum="2"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="5dp">
 
         <!-- Sehri Card -->
         <LinearLayout
@@ -319,39 +320,11 @@
     <RelativeLayout
         android:id="@+id/current_widget_forbidden_banner_box"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="@drawable/widget_sub_card_bg"
-        android:padding="8dp">
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_forbidden_bg"
+        android:padding="6dp">
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentStart="true"
-            android:layout_centerVertical="true"
-            android:layout_toStartOf="@+id/current_widget_upcoming_forbidden_container"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/current_widget_forbidden_banner_title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="আসন্ন নিষিদ্ধ নামাজের সময়সূচী"
-                android:textColor="#FFB300"
-                android:textSize="9.5sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/current_widget_forbidden_banner_desc"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2.5dp"
-                android:text="নামাজ আদায় করা সম্পূর্ণ নিষিদ্ধ"
-                android:textColor="#E0E0E0"
-                android:textSize="8.5sp" />
-        </LinearLayout>
-
-        <!-- Right side: Compact upcoming forbidden badge -->
+        <!-- Right side: Compact upcoming forbidden badge (Defined first to avoid measuring overlapping) -->
         <LinearLayout
             android:id="@+id/current_widget_upcoming_forbidden_container"
             android:layout_width="wrap_content"
@@ -383,6 +356,33 @@
                 android:textColor="#FFFFFF"
                 android:textSize="9sp"
                 android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:layout_toStartOf="@id/current_widget_upcoming_forbidden_container"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/current_widget_forbidden_banner_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="আসন্ন নিষিদ্ধ নামাজের সময়সূচী"
+                android:textColor="#FFB300"
+                android:textSize="9.5sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/current_widget_forbidden_banner_desc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2.5dp"
+                android:text="নামাজ আদায় করা সম্পূর্ণ নিষিদ্ধ"
+                android:textColor="#E0E0E0"
+                android:textSize="8.5sp" />
         </LinearLayout>
     </RelativeLayout>
 

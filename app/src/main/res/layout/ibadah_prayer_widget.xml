@@ -245,38 +245,10 @@
         android:id="@+id/widget_forbidden_banner_box"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/widget_sub_card_bg"
+        android:background="@drawable/widget_forbidden_bg"
         android:padding="8dp">
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentStart="true"
-            android:layout_centerVertical="true"
-            android:layout_toStartOf="@+id/widget_upcoming_forbidden_container"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/widget_countdown_title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="⏳ পরবর্তী ওয়াক্তের বাকি সময়:"
-                android:textColor="#FFB300"
-                android:textSize="9.5sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/widget_countdown_value"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="হিসাব করা হচ্ছে..."
-                android:textColor="#FFFFFF"
-                android:textSize="10sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <!-- Right side: Compact upcoming forbidden time badge -->
+        <!-- Right side: Compact upcoming forbidden time badge (Defined first to avoid measuring overlapping) -->
         <LinearLayout
             android:id="@+id/widget_upcoming_forbidden_container"
             android:layout_width="wrap_content"
@@ -307,6 +279,34 @@
                 android:text="--:--"
                 android:textColor="#FFFFFF"
                 android:textSize="9sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:layout_toStartOf="@id/widget_upcoming_forbidden_container"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_countdown_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⏳ পরবর্তী ওয়াক্তের বাকি সময়:"
+                android:textColor="#FFB300"
+                android:textSize="9.5sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_countdown_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="হিসাব করা হচ্ছে..."
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </RelativeLayout>
