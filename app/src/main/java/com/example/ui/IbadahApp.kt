@@ -376,6 +376,21 @@ fun IbadahApp(viewModel: IbadahViewModel) {
         }
     }
 
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.setAppForegroundState(true)
+            } else if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) {
+                viewModel.setAppForegroundState(false)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.playNextBgMusic()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -440,11 +455,7 @@ fun IbadahApp(viewModel: IbadahViewModel) {
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (alarm.isAzanAlarm) {
-                            if (isBn) "মুয়াযযিনের কণ্ঠে আজান বাজছে..." else "Muezzin is calling Azan..."
-                        } else {
-                            if (isBn) "এলার্মের টোন বাজছে..." else "Ringtone is playing..."
-                        },
+                        text = if (isBn) "মোবাইলের ডিফল্ট এলার্ম টোন বাজছে..." else "Default mobile alarm is playing...",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -484,8 +495,8 @@ fun IbadahApp(viewModel: IbadahViewModel) {
                             .background(MaterialTheme.colorScheme.background)
                     ) {
                     // Underlay the magnificent custom generated 3D Mecca Desert road wallpaper!
-                    Image(
-                        painter = painterResource(id = com.example.R.drawable.islamic_mecca_wallpaper),
+                    coil.compose.AsyncImage(
+                        model = com.example.R.drawable.islamic_mecca_wallpaper,
                         contentDescription = "Makkah Road Wallpaper",
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         alpha = 1.0f, // 100% full clear view with crisp sharpness
@@ -777,8 +788,8 @@ fun IbadahApp(viewModel: IbadahViewModel) {
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 // Full Screen background wallpaper with 100% elegant visibility so it looks completely clear & crisp!
-                Image(
-                    painter = painterResource(id = com.example.R.drawable.islamic_mecca_wallpaper),
+                coil.compose.AsyncImage(
+                    model = com.example.R.drawable.islamic_mecca_wallpaper,
                     contentDescription = "Full Background Wallpaper",
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     alpha = 0.15f, // Beautiful subtle backdrop so text remains highly readable but the Mecca 3D road is clearly visible across all pages!
@@ -6110,6 +6121,41 @@ fun BrowserVideoPlayer(urlOrVideoId: String, isYoutube: Boolean, modifier: Modif
 
 @Composable
 fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.OnlinePrediction,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = if (isBn) "মিডিয়া হাব অপ্টিমাইজড" else "Media Hub Optimized",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = if (isBn) "ব্যাটারি ও পারফরম্যান্সের জন্য বাহ্যিক এপিআই বন্ধ করা হয়েছে।" else "External video feed APIs disabled for superior performance.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun DummyUnusedLiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
     var activeTitle by remember { mutableStateOf("") }
     var activeYoutubeId by remember { mutableStateOf("") }
     var activeSpeaker by remember { mutableStateOf("") }
@@ -6146,13 +6192,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
     }
 
     if (activeDailymotionVideoState != null) {
-        com.example.ui.InAppDailymotionPlayerDialog(
-            video = activeDailymotionVideoState!!,
-            viewModel = viewModel,
-            relatedVideos = emptyList(),
-            isBn = isBn,
-            onDismiss = { activeDailymotionVideoState = null }
-        )
+        // Dailymotion component deactivated
     }
 
     if (activeYoutubeId.isNotEmpty()) {
@@ -6686,17 +6726,7 @@ fun LiveAiTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
 
             val isListLoadingToShow = if (selectedTrustedChannelTab == "all" && mediaSubSection == "video") false else isYoutubeLoading
             if (activeYoutubeId.isNotEmpty()) {
-                InAppYoutubePlayerDialog(
-                    videoId = activeYoutubeId,
-                    videoTitle = activeTitle,
-                    videoSpeaker = activeSpeaker,
-                    relatedVideos = youtubeResults,
-                    isBn = isBn,
-                    onDismiss = { activeYoutubeId = "" },
-                    onVideoBlocked = { blockedId ->
-                        viewModel.removeVideoFromResults(blockedId)
-                    }
-                )
+                // Youtube component deactivated
             }
 
             // (B) Live Direct HLS/Exo Player Video Dialog (Media3 Native)
@@ -7221,98 +7251,7 @@ fun DailymotionVideoRowCard(
     isBn: Boolean,
     viewModel: IbadahViewModel,
     onClick: () -> Unit
-) {
-    val context = LocalContext.current
-    val bookmarks by viewModel.dailymotionBookmarks.collectAsState()
-    val isCurrBookmarked = bookmarks.contains(video.id)
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(width = 110.dp, height = 68.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(video.thumbnail)
-                        .crossfade(true)
-                        .placeholder(com.example.R.drawable.islamic_mecca_wallpaper)
-                        .error(com.example.R.drawable.islamic_mecca_wallpaper)
-                        .build(),
-                    contentDescription = video.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(4.dp)
-                        .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                ) {
-                    Text(
-                        text = video.durationString,
-                        color = Color.White,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = video.title,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = video.channelName,
-                        color = SoftGoldBorder,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(
-                        onClick = { viewModel.toggleDailymotionBookmark(video) },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Bookmark",
-                            tint = if (isCurrBookmarked) Color(0xFFFFD700) else Color.Gray.copy(alpha = 0.5f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
+) {}
 
 // standalone generator function for endless videos recommendations
 private fun generateIslamicVideos(category: String, query: String, count: Int, isBn: Boolean): List<com.example.data.IslamicVideo> {
@@ -8203,33 +8142,6 @@ fun SettingsNoticeTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                                                 )
                                             }
 
-                                            // 2. Sound Type Selector Button (Azan vs Beep)
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier
-                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                                    .clickable { viewModel.toggleAlarmAzan(alarm.id) }
-                                                    .padding(horizontal = 8.dp, vertical = 6.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (alarm.isAzanAlarm) Icons.Default.MusicNote else Icons.Default.VolumeOff,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(14.dp),
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    text = if (alarm.isAzanAlarm) {
-                                                        if (isBn) "আজান এলার্ম" else if (isAr) "منبه الأذان" else "Azan Bell"
-                                                    } else {
-                                                        if (isBn) "সাধারণ টোন" else if (isAr) "رنة عادية" else "Beep Alert"
-                                                    },
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-
                                             // 3. Edit Time Offset Button
                                             OutlinedButton(
                                                 onClick = {
@@ -8249,28 +8161,26 @@ fun SettingsNoticeTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                                                 )
                                             }
 
-                                            // 4. Test Azan Sound Button
-                                            if (alarm.isAzanAlarm) {
-                                                FilledTonalButton(
-                                                    onClick = {
-                                                        playingAzanTheme = title
-                                                        showAzanPlayDialog = true
-                                                    },
-                                                    modifier = Modifier.height(28.dp),
-                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    colors = ButtonDefaults.filledTonalButtonColors(
-                                                        containerColor = MaterialTheme.colorScheme.primary
-                                                    )
-                                                ) {
-                                                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.White)
-                                                    Spacer(modifier = Modifier.width(3.dp))
-                                                    Text(
-                                                        text = if (isBn) "আজান টেস্ট" else if (isAr) "تجربة الأذان" else "Test Azan",
-                                                        fontSize = 10.sp,
-                                                        color = Color.White
-                                                    )
-                                                }
+                                            // 4. Test Alarm Sound Button
+                                            FilledTonalButton(
+                                                onClick = {
+                                                    playingAzanTheme = title
+                                                    showAzanPlayDialog = true
+                                                },
+                                                modifier = Modifier.height(28.dp),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                                shape = RoundedCornerShape(8.dp),
+                                                colors = ButtonDefaults.filledTonalButtonColors(
+                                                    containerColor = MaterialTheme.colorScheme.primary
+                                                )
+                                            ) {
+                                                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.White)
+                                                Spacer(modifier = Modifier.width(3.dp))
+                                                Text(
+                                                    text = if (isBn) "টেস্ট করুন" else if (isAr) "تجربة" else "Test Sound",
+                                                    fontSize = 10.sp,
+                                                    color = Color.White
+                                                )
                                             }
                                         }
                                     }
@@ -8928,7 +8838,7 @@ fun SettingsNoticeTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
                     onDismissRequest = { showAzanPlayDialog = false },
                     title = {
                         Text(
-                            text = if (isBn) "আজান টেস্ট প্লেয়ার" else if (isAr) "اختبار صوت الأذان" else "Azan Audio Playback Test",
+                            text = if (isBn) "এলার্ম টেস্ট প্লেয়ার" else if (isAr) "اختبار صوت المنبه" else "Alarm Sound Test",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium
                         )
@@ -8982,7 +8892,7 @@ fun SettingsNoticeTabScreen(viewModel: IbadahViewModel, isBn: Boolean) {
 
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = if (isBn) "মুয়াযযিনের কণ্ঠে আজান বাজছে..." else if (isAr) "صوت الأذان يرتفع الآن بصوت جميل..." else "Muezzin's beautiful azan voice is playing...",
+                                    text = if (isBn) "মোবাইলের ডিফল্ট এলার্ম টোন বাজছে..." else if (isAr) "صوت المنبة يرتفع الآن..." else "Mobile default alarm is playing...",
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontSize = 13.sp,
@@ -11282,35 +11192,35 @@ fun OnboardingScreen(onFinished: () -> Unit, isBn: Boolean) {
                 titleEn = "Prayer & Worship",
                 descBn = "সরাসরি নামাজের সময়সূচী, কিবলা কম্পাস, ডিজিটাল তসবিহ এবং প্রতিদিনের ওয়াক্ত ও ফরজ নামাজ ট্র্যাকার।",
                 descEn = "Real-time accurate Prayer Times, Qibla direction, Digital Tasbih counter, and personalized Salat tracking records.",
-                imageUrl = "https://images.unsplash.com/photo-1597935258735-e254c1839512?auto=format&fit=crop&w=1200&q=80" // Warm Grand Mosque twilight architecture
+                imageRes = com.example.R.drawable.img_onboard_pray_1781375530573
             ),
             OnboardingPageData(
                 titleBn = "আল-কুরআনুল কারীম",
                 titleEn = "The Holy Quran",
                 descBn = "বাংলা উচ্চারণ, অর্থ, তাফসীর ও স্পষ্ট অডিও তিলাওয়াতসহ সম্পূর্ণ আল-কুরআন শুনুন এবং পড়ুন।",
                 descEn = "Read, learn, and listen to the Holy Quran with phonetics, Bengali translation, script choices, and crystal clear audios.",
-                imageUrl = "https://images.unsplash.com/photo-1609599006353-e629e1d55139?auto=format&fit=crop&w=1200&q=80" // Holy Quran under warm spiritual lighting
+                imageRes = com.example.R.drawable.img_onboard_quran_1781375545319
             ),
             OnboardingPageData(
                 titleBn = "লাইভ টিভি ও রেডিও",
                 titleEn = "Live TV & Radio",
                 descBn = "মক্কা ও মদিনা লাইভ প্রচার, বিভিন্ন ইসলামিক টিভি চ্যানেল এবং সরাসরি জনপ্রিয় ইসলামিক রেডিও শুনুন।",
                 descEn = "Watch Holy Makkah & Madinah Live streams, Islamic TV channels, and listen to soul-enriching Islamic Radio broadcasts directly.",
-                imageUrl = "https://images.unsplash.com/photo-1564769050039-23113de55513?auto=format&fit=crop&w=1200&q=80" // The Holy Kaaba closeup with gold-wrapped Kiswah
+                imageRes = com.example.R.drawable.img_onboard_live_1781375559920
             ),
             OnboardingPageData(
                 titleBn = "ওয়াজ ও ইসলামিক ভিডিও",
                 titleEn = "Waz & Islamic Video",
                 descBn = "জনপ্রিয় বক্তাদের চমৎকার সব ওয়াজ মাহফিল, কুরআন তিলাওয়াতের বঙ্গানুবাদ এবং সুন্দর ইসলামিক গজলের লাইব্রেরী।",
                 descEn = "Access professional waz mahfil collection, surah translations, and traditional audio-visual Islamic Nasheeds anytime.",
-                imageUrl = "https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=1200&q=80" // Majestic starry sky and minarets
+                imageRes = com.example.R.drawable.img_onboard_waz_1781375573024
             ),
             OnboardingPageData(
                 titleBn = "প্রতিদিনের দোআ ও আমল",
                 titleEn = "Daily Dua & Amal",
                 descBn = "প্রতিদিনের প্রয়োজনীয় সহীহ দুআ কালেকশন, উন্নত আমল ট্র্যাকার, হিসনুল মুসলিম ও সুন্দর ইসলামিক কুইজ।",
                 descEn = "Follow authentic daily Adhkar, track your habits/good deeds, browse Hisnul Muslim, and test your Islamic knowledge.",
-                imageUrl = "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=1200&q=80" // Warm hands raised in peaceful Dua
+                imageRes = com.example.R.drawable.img_onboard_dua_1781375586821
             )
         )
     }
@@ -11339,7 +11249,7 @@ fun OnboardingScreen(onFinished: () -> Unit, isBn: Boolean) {
 
         // Background Wallpaper image with crossfade
         coil.compose.AsyncImage(
-            model = page.imageUrl,
+            model = page.imageRes,
             contentDescription = page.titleEn,
             modifier = Modifier.fillMaxSize(),
             contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -11447,43 +11357,84 @@ fun OnboardingScreen(onFinished: () -> Unit, isBn: Boolean) {
                 }
             }
             
-            // Primary Next Button
-            Button(
-                onClick = {
-                    if (currentPage < pages.lastIndex) {
-                        currentPage++
-                    } else {
-                        onFinished()
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .testTag("onboarding_next_button"),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = RoundedCornerShape(12.dp)
+            // Buttons Row containing Back & Next
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = if (currentPage == pages.lastIndex) {
-                            if (isBn) "অ্যাপসে প্রবেশ করুন" else "Get Started"
-                        } else {
-                            if (isBn) "পরবর্তী বিবরণ" else "Next Feature"
+                if (currentPage > 0) {
+                    OutlinedButton(
+                        onClick = {
+                            if (currentPage > 0) {
+                                currentPage--
+                            }
                         },
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = if (currentPage == pages.lastIndex) Icons.Default.CheckCircle else Icons.Default.ArrowForward,
-                        contentDescription = "Next Action",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp)
+                            .testTag("onboarding_back_button"),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back Action",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isBn) "পেছনে" else "Back",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                
+                Button(
+                    onClick = {
+                        if (currentPage < pages.lastIndex) {
+                            currentPage++
+                        } else {
+                            onFinished()
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(if (currentPage > 0) 1.5f else 1f)
+                        .height(52.dp)
+                        .testTag("onboarding_next_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (currentPage == pages.lastIndex) {
+                                if (isBn) "অ্যাপসে প্রবেশ করুন" else "Get Started"
+                            } else {
+                                if (isBn) "পরবর্তী" else "Next"
+                            },
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = if (currentPage == pages.lastIndex) Icons.Default.CheckCircle else Icons.Default.ArrowForward,
+                            contentDescription = "Next Action",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -11495,6 +11446,6 @@ data class OnboardingPageData(
     val titleEn: String,
     val descBn: String,
     val descEn: String,
-    val imageUrl: String
+    val imageRes: Int
 )
 

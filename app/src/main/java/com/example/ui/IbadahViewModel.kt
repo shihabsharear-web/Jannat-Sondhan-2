@@ -54,237 +54,26 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
         getDeedsPrefs().edit().putBoolean("has_seen_onboarding_v2", seen).apply()
     }
 
-    // --- YouTube API Search State ---
-    private val _youtubeSearchQuery = MutableStateFlow("")
-    val youtubeSearchQuery = _youtubeSearchQuery.asStateFlow()
+    // --- Dailymotion, YouTube and Recommendation APIs (Deactivated / Optimized) ---
+    val dailymotionSearchResults = MutableStateFlow<List<DailymotionVideo>>(emptyList()).asStateFlow()
+    val isDailymotionLoading = MutableStateFlow(false).asStateFlow()
+    val dailymotionBookmarks = MutableStateFlow<Set<String>>(emptySet()).asStateFlow()
+    val dailymotionBookmarkedVideos = MutableStateFlow<List<DailymotionVideo>>(emptyList()).asStateFlow()
+    val relatedDailymotionVideos = MutableStateFlow<List<DailymotionVideo>>(emptyList()).asStateFlow()
 
-    private val _youtubeSearchResults = MutableStateFlow<List<IslamicVideo>>(emptyList())
-    val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
+    val youtubeSearchQuery = MutableStateFlow("").asStateFlow()
+    val youtubeSearchResults = MutableStateFlow<List<IslamicVideo>>(emptyList()).asStateFlow()
+    val isYoutubeLoading = MutableStateFlow(false).asStateFlow()
 
-    private val _isYoutubeLoading = MutableStateFlow(false)
-    val isYoutubeLoading = _isYoutubeLoading.asStateFlow()
+    val userInterests = MutableStateFlow<Map<String, Int>>(emptyMap()).asStateFlow()
+    val recommendedVideos = MutableStateFlow<List<IslamicVideo>>(emptyList()).asStateFlow()
 
-    // --- Smart Recommendations & User Interests ---
-    private val _userInterests = MutableStateFlow<Map<String, Int>>(emptyMap())
-    val userInterests = _userInterests.asStateFlow()
+    fun searchYoutube(query: String) {}
 
-    private val _recommendedVideos = MutableStateFlow<List<IslamicVideo>>(emptyList())
-    val recommendedVideos = _recommendedVideos.asStateFlow()
-
-    fun searchYoutube(query: String) {
-        _youtubeSearchQuery.value = query
-        viewModelScope.launch(Dispatchers.IO) {
-            _isYoutubeLoading.value = true
-            try {
-                // Search via official YouTube Data API v3 (caches results inside)
-                var results = com.example.service.YoutubeApiClient.searchYouTubeVideos(context, query)
-                
-                // Prioritize and promote videos from trusted channels first
-                results = prioritizeTrustedChannels(results)
-                
-                _youtubeSearchResults.value = results
-            } catch (e: Exception) {
-                android.util.Log.e("IbadahViewModel", "Error searching YouTube", e)
-            } finally {
-                _isYoutubeLoading.value = false
-            }
-        }
-    }
-
-    private fun prioritizeTrustedChannels(videos: List<IslamicVideo>): List<IslamicVideo> {
-        val trustedChannels = listOf("MercifulServant", "One Islam Productions", "Peace TV")
-        val trustedList = mutableListOf<IslamicVideo>()
-        val regularList = mutableListOf<IslamicVideo>()
-        
-        videos.forEach { video ->
-            val isTrusted = trustedChannels.any { channel ->
-                video.speaker.lowercase(Locale.ROOT).contains(channel.lowercase(Locale.ROOT))
-            }
-            if (isTrusted) {
-                trustedList.add(video)
-            } else {
-                regularList.add(video)
-            }
-        }
-        return trustedList + regularList
-    }
-
-    fun recordVideoClick(video: IslamicVideo) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val speaker = video.speaker
-                if (speaker.isNotBlank()) {
-                    val prefs = context.getSharedPreferences("ibadah_user_interests", android.content.Context.MODE_PRIVATE)
-                    val currentClicks = prefs.getInt(speaker, 0)
-                    prefs.edit().putInt(speaker, currentClicks + 1).apply()
-                    
-                    // Also store last clicked channel
-                    prefs.edit().putString("last_clicked_channel", speaker).apply()
-                    
-                    loadUserInterests()
-                    updateRecommendations()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("IbadahViewModel", "Error recording video click", e)
-            }
-        }
-    }
-
-    fun loadUserInterests() {
-        try {
-            val prefs = context.getSharedPreferences("ibadah_user_interests", android.content.Context.MODE_PRIVATE)
-            val interests = mutableMapOf<String, Int>()
-            val channels = listOf("MercifulServant", "One Islam Productions", "Peace TV")
-            channels.forEach { channel ->
-                val clicks = prefs.getInt(channel, 0)
-                if (clicks > 0) {
-                    interests[channel] = clicks
-                }
-            }
-            _userInterests.value = interests
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun updateRecommendations() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val prefs = context.getSharedPreferences("ibadah_user_interests", android.content.Context.MODE_PRIVATE)
-                val lastClicked = prefs.getString("last_clicked_channel", null)
-                val recommendationPool = mutableListOf<IslamicVideo>()
-                
-                val mercifulVideos = listOf(
-                    IslamicVideo(
-                        id = "rec_ms1",
-                        title = "The Power of Dua (Sincere Cry) - Beautiful Reminder",
-                        speaker = "MercifulServant",
-                        thumbnail = "https://img.youtube.com/vi/DdgvQsc2yD8/mqdefault.jpg",
-                        duration = "08:15",
-                        youtubeId = "DdgvQsc2yD8"
-                    ),
-                    IslamicVideo(
-                        id = "rec_ms2",
-                        title = "When You Feel Lost or Sad - Beautiful Reminders",
-                        speaker = "MercifulServant",
-                        thumbnail = "https://img.youtube.com/vi/g_bZ_gN8WqE/mqdefault.jpg",
-                        duration = "10:30",
-                        youtubeId = "g_bZ_gN8WqE"
-                    ),
-                    IslamicVideo(
-                        id = "rec_ms3",
-                        title = "Unbending Trust in Allah's Plan (Tawakkul)",
-                        speaker = "MercifulServant",
-                        thumbnail = "https://img.youtube.com/vi/F8eWBeJ0-1E/mqdefault.jpg",
-                        duration = "12:45",
-                        youtubeId = "F8eWBeJ0-1E"
-                    )
-                )
-
-                val oneIslamVideos = listOf(
-                    IslamicVideo(
-                        id = "rec_oi1",
-                        title = "How Satan Shuts Down Your Good Deeds - Deep Discussion",
-                        speaker = "One Islam Productions",
-                        thumbnail = "https://img.youtube.com/vi/W-Q8P8A4W3M/mqdefault.jpg",
-                        duration = "15:20",
-                        youtubeId = "W-Q8P8A4W3M"
-                    ),
-                    IslamicVideo(
-                        id = "rec_oi2",
-                        title = "The Importance of Fasting & Daily Sunnahs",
-                        speaker = "One Islam Productions",
-                        thumbnail = "https://img.youtube.com/vi/6S1-NveF5C8/mqdefault.jpg",
-                        duration = "11:45",
-                        youtubeId = "6S1-NveF5C8"
-                    ),
-                    IslamicVideo(
-                        id = "rec_oi3",
-                        title = "What Happens After We Die? - Educational Dawah Series",
-                        speaker = "One Islam Productions",
-                        thumbnail = "https://img.youtube.com/vi/c_L5b3eZ6g4/mqdefault.jpg",
-                        duration = "22:10",
-                        youtubeId = "c_L5b3eZ6g4"
-                    )
-                )
-
-                val peaceTvVideos = listOf(
-                    IslamicVideo(
-                        id = "rec_pt1",
-                        title = "Scientific Miracles in the Noble Quran - Dr. Zakir Naik",
-                        speaker = "Peace TV",
-                        thumbnail = "https://img.youtube.com/vi/F8eWBeJ0-1E/mqdefault.jpg",
-                        duration = "18:40",
-                        youtubeId = "F8eWBeJ0-1E"
-                    ),
-                    IslamicVideo(
-                        id = "rec_pt2",
-                        title = "Fundamentals of Islamic Jurisprudence & Hadith Studies",
-                        speaker = "Peace TV",
-                        thumbnail = "https://img.youtube.com/vi/W-Q8P8A4W3M/mqdefault.jpg",
-                        duration = "14:15",
-                        youtubeId = "W-Q8P8A4W3M"
-                    ),
-                    IslamicVideo(
-                        id = "rec_pt3",
-                        title = "Questions and Answers on Peace, Faith, and Humanity",
-                        speaker = "Peace TV",
-                        thumbnail = "https://img.youtube.com/vi/6S1-NveF5C8/mqdefault.jpg",
-                        duration = "25:30",
-                        youtubeId = "6S1-NveF5C8"
-                    )
-                )
-
-                if (lastClicked != null) {
-                    when {
-                        lastClicked.lowercase(Locale.ROOT).contains("merciful") -> {
-                            recommendationPool.addAll(mercifulVideos)
-                            recommendationPool.add(oneIslamVideos[0])
-                            recommendationPool.add(peaceTvVideos[0])
-                        }
-                        lastClicked.lowercase(Locale.ROOT).contains("one islam") -> {
-                            recommendationPool.addAll(oneIslamVideos)
-                            recommendationPool.add(mercifulVideos[0])
-                            recommendationPool.add(peaceTvVideos[0])
-                        }
-                        lastClicked.lowercase(Locale.ROOT).contains("peace tv") -> {
-                            recommendationPool.addAll(peaceTvVideos)
-                            recommendationPool.add(mercifulVideos[0])
-                            recommendationPool.add(oneIslamVideos[0])
-                        }
-                        else -> {
-                            recommendationPool.add(mercifulVideos[0])
-                            recommendationPool.add(oneIslamVideos[0])
-                            recommendationPool.add(peaceTvVideos[0])
-                            recommendationPool.add(mercifulVideos[1])
-                        }
-                    }
-                } else {
-                    recommendationPool.add(mercifulVideos[0])
-                    recommendationPool.add(oneIslamVideos[0])
-                    recommendationPool.add(peaceTvVideos[0])
-                    recommendationPool.add(mercifulVideos[1])
-                }
-
-                // Exclude already blocked ones from recommendations
-                val filteredRecs = recommendationPool.filter { !com.example.service.YoutubeApiClient.isBlocked(context, it.youtubeId) }
-                _recommendedVideos.value = filteredRecs
-            } catch (e: Exception) {
-                android.util.Log.e("IbadahViewModel", "Error updating recommendations", e)
-            }
-        }
-    }
-
-    fun removeVideoFromResults(videoId: String) {
-        val currentList = _youtubeSearchResults.value
-        val filteredList = currentList.filter { it.youtubeId != videoId }
-        _youtubeSearchResults.value = filteredList
-        // Permanently add to local blocklist and clear cache
-        com.example.service.YoutubeApiClient.blockVideo(context, videoId)
-        
-        // Also refresh recommendations in case it was a recommended item
-        updateRecommendations()
-    }
+    fun recordVideoClick(video: IslamicVideo) {}
+    fun loadUserInterests() {}
+    fun updateRecommendations() {}
+    fun removeVideoFromResults(videoId: String) {}
 
     private fun translatePartBn(englishStr: String): String {
         return when (englishStr.lowercase(java.util.Locale.ROOT).trim()) {
@@ -459,6 +248,7 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
 
     private val snoozedAlarms = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private var systemRingtone: android.media.Ringtone? = null
+    private var toneGeneratorJob: kotlinx.coroutines.Job? = null
 
     private var bgExoPlayer: androidx.media3.exoplayer.ExoPlayer? = null
     private var azanExoPlayer: androidx.media3.exoplayer.ExoPlayer? = null
@@ -606,6 +396,11 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
     private fun stopAlarmSound() {
         viewModelScope.launch(Dispatchers.Main) {
             try {
+                toneGeneratorJob?.cancel()
+                toneGeneratorJob = null
+            } catch (e: Exception) {}
+
+            try {
                 azanExoPlayer?.stop()
                 azanExoPlayer?.release()
             } catch (e: Exception) {}
@@ -628,19 +423,114 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun startToneGeneratorLoop() {
+        toneGeneratorJob?.cancel()
+        toneGeneratorJob = viewModelScope.launch(Dispatchers.Default) {
+            try {
+                // Use STREAM_ALARM for standard audible output
+                val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_ALARM, 100)
+                while (isActive) {
+                    // Universal standard warning beep tone on both GSM and CDMA structures alike
+                    toneGen.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 800)
+                    kotlinx.coroutines.delay(1000)
+                    toneGen.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 800)
+                    kotlinx.coroutines.delay(1500)
+                }
+                toneGen.release()
+            } catch (e: Exception) {
+                android.util.Log.e("IbadahViewModel", "Failed to launch custom ALARM tone stream, trying fallback BEEP", e)
+                try {
+                    val toneGenFallback = android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 100)
+                    while (isActive) {
+                        toneGenFallback.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 400)
+                        kotlinx.coroutines.delay(600)
+                    }
+                    toneGenFallback.release()
+                } catch (ex: Exception) {
+                    android.util.Log.e("IbadahViewModel", "ToneGenerator hard fallback failed", ex)
+                }
+            }
+        }
+    }
+
+    private fun playDefaultMobileAlarm() {
+        android.util.Log.d("IbadahViewModel", "playDefaultMobileAlarm triggered")
+        try {
+            val alertUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
+                ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+                ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+
+            if (alertUri != null) {
+                // Try playing via MediaPlayer
+                try {
+                    alarmPlayer?.stop()
+                    alarmPlayer?.release()
+                } catch (ex: Exception) {}
+
+                try {
+                    alarmPlayer = android.media.MediaPlayer().apply {
+                        setDataSource(context, alertUri)
+                        val audioAttributes = android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                        setAudioAttributes(audioAttributes)
+                        isLooping = true
+                        prepare()
+                        start()
+                    }
+                    android.util.Log.d("IbadahViewModel", "Playing default mobile alarm via MediaPlayer USAGE_ALARM successfully")
+                    return
+                } catch (e: Exception) {
+                    android.util.Log.e("IbadahViewModel", "MediaPlayer USAGE_ALARM failed, trying Ringtone direct", e)
+                }
+
+                // If MediaPlayer fails, try Ringtone with USAGE_ALARM attributes
+                try {
+                    val ringtone = android.media.RingtoneManager.getRingtone(context, alertUri)
+                    if (ringtone != null) {
+                        val audioAttributes = android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                            ringtone.isLooping = true
+                        }
+                        ringtone.audioAttributes = audioAttributes
+                        ringtone.play()
+                        systemRingtone = ringtone
+                        android.util.Log.d("IbadahViewModel", "Playing default mobile alarm via Ringtone USAGE_ALARM successfully")
+                        return
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("IbadahViewModel", "Ringtone USAGE_ALARM failed", e)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("IbadahViewModel", "Failed to retrieve default alarm URI", e)
+        }
+
+        // If all system files are missing/failed, fallback to fully programmatic ToneGenerator
+        try {
+            android.util.Log.w("IbadahViewModel", "No built-in ringtones. Using ToneGenerator fallback beep loop")
+            startToneGeneratorLoop()
+        } catch (e: Exception) {
+            android.util.Log.e("IbadahViewModel", "ToneGenerator fallback failed", e)
+        }
+    }
+
     private fun playAlarmSound(isAzan: Boolean) {
         viewModelScope.launch(Dispatchers.Main) {
             stopAlarmSound()
-            
-            if (isAzan) {
-                try {
-                    // Release the old player and instantiate a clean new one to prevent listener pileups and state corruption!
-                    try {
-                        azanExoPlayer?.stop()
-                        azanExoPlayer?.release()
-                    } catch (e: Exception) {}
-                    azanExoPlayer = null
 
+            if (isAzan) {
+                val azanUrl = "https://archive.org/download/beautiful-adhan-collection/Adhan%20Makkah.mp3"
+                try {
+                    azanExoPlayer?.stop()
+                    azanExoPlayer?.release()
+                } catch (e: Exception) {}
+
+                try {
                     azanExoPlayer = androidx.media3.exoplayer.ExoPlayer.Builder(context)
                         .setLooper(android.os.Looper.getMainLooper())
                         .build().apply {
@@ -648,79 +538,25 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
                                 .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
                                 .setUsage(androidx.media3.common.C.USAGE_MEDIA)
                                 .build()
-                            setAudioAttributes(audioAttributes, false) // bypass focus limitations
-                            volume = 1.0f // full clear volume for reliable testing
-                        }
-                    
-                    val player = azanExoPlayer ?: return@launch
-                    
-                    val urls = listOf(
-                        "https://download.quranicaudio.com/adhan/makkah.mp3",
-                        "https://download.quranicaudio.com/adhan/madinah.mp3",
-                        "https://www.islamcan.com/audio/adhan/azan1.mp3",
-                        "https://www.islamcan.com/audio/adhan/azan14.mp3"
-                    )
-                    
-                    var currentUrlIndex = 0
-                    
-                    fun playUrlAtIndex(index: Int) {
-                        if (index >= urls.size) {
-                            android.util.Log.e("IbadahViewModel", "All Azan URLs failed to play!")
-                            return
-                        }
-                        try {
-                            player.stop()
-                            player.clearMediaItems()
-                            player.setMediaItem(androidx.media3.common.MediaItem.fromUri(urls[index]))
-                            player.playWhenReady = true
-                            player.prepare()
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            playUrlAtIndex(index + 1)
-                        }
-                    }
-                    
-                    player.addListener(object : androidx.media3.common.Player.Listener {
-                        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                            android.util.Log.e("IbadahViewModel", "Azan play error at index $currentUrlIndex: ${error.message}. Trying next fallback...")
-                            currentUrlIndex++
-                            playUrlAtIndex(currentUrlIndex)
-                        }
-                    })
-                    
-                    playUrlAtIndex(0)
-                    android.util.Log.d("IbadahViewModel", "Playing beautiful Azan via brand new ExoPlayer successfully")
-                } catch (e: Exception) {
-                    android.util.Log.e("IbadahViewModel", "Failed playing beautiful Azan via ExoPlayer, trying system fallback", e)
-                }
-                return@launch
-            }
-            
-            // Non-Azan fallbacks
-            withContext(Dispatchers.IO) {
-                try {
-                    val alertUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
-                        ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
-                        ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
-
-                    if (alertUri != null) {
-                        try {
-                            val ringtone = android.media.RingtoneManager.getRingtone(context, alertUri)
-                            if (ringtone != null) {
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                                    ringtone.isLooping = true
+                            setAudioAttributes(audioAttributes, true)
+                            volume = 1.0f
+                            addListener(object : androidx.media3.common.Player.Listener {
+                                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                                    android.util.Log.e("IbadahViewModel", "Azan playback error, falling back to default alarm", error)
+                                    playDefaultMobileAlarm()
                                 }
-                                ringtone.play()
-                                systemRingtone = ringtone
-                                android.util.Log.d("IbadahViewModel", "Playing ringtone/beep successfully")
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("IbadahViewModel", "Failed RingtoneManager, trying MediaPlayer fallback", e)
+                            })
+                            setMediaItem(androidx.media3.common.MediaItem.fromUri(azanUrl))
+                            playWhenReady = true
+                            prepare()
                         }
-                    }
+                    android.util.Log.d("IbadahViewModel", "Azan ExoPlayer launched successfully")
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    android.util.Log.e("IbadahViewModel", "Failed to setup Azan ExoPlayer, falling back to default alarm", e)
+                    playDefaultMobileAlarm()
                 }
+            } else {
+                playDefaultMobileAlarm()
             }
         }
     }
@@ -1647,11 +1483,6 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
             _completedQuizDates.value = quizPrefs.getStringSet("completed_dates", emptySet()) ?: emptySet()
             _completedQuizMonths.value = quizPrefs.getStringSet("completed_months", emptySet()) ?: emptySet()
             _userName.value = quizPrefs.getString("user_name", "") ?: ""
-            
-            // Warm up trusted channel recommendations and user интересты
-            loadUserInterests()
-            updateRecommendations()
-            loadDailymotionBookmarks()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -1743,10 +1574,19 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
         return result
     }
 
+    private var isAppActiveInForeground = true
+
+    fun setAppForegroundState(isForeground: Boolean) {
+        android.util.Log.d("IbadahViewModel", "Setting App Foreground state: $isForeground (Optimizing battery)")
+        isAppActiveInForeground = isForeground
+    }
+
     private fun startClockAndTimers() {
         viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
-                calculatePrayerCountdown()
+                if (isAppActiveInForeground) {
+                    calculatePrayerCountdown()
+                }
                 
                 // Check if any snoozed alarm is ready to trigger
                 val currTime = System.currentTimeMillis()
@@ -1811,7 +1651,12 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
 
-                delay(1000)
+                if (isAppActiveInForeground) {
+                    delay(1000)
+                } else {
+                    // Sleep for 15 seconds when backgrounded to reduce CPU wakeups and save substantial battery
+                    delay(15000)
+                }
             }
         }
     }
@@ -3541,125 +3386,13 @@ class IbadahViewModel(application: Application) : AndroidViewModel(application) 
     // ===================================================================================
     // DAILYMOTION MEDIA SYSTEM
     // ===================================================================================
-    private val _dailymotionSearchResults = MutableStateFlow<List<DailymotionVideo>>(emptyList())
-    val dailymotionSearchResults: StateFlow<List<DailymotionVideo>> = _dailymotionSearchResults.asStateFlow()
 
-    private val _isDailymotionLoading = MutableStateFlow(false)
-    val isDailymotionLoading: StateFlow<Boolean> = _isDailymotionLoading.asStateFlow()
-
-    private val _dailymotionBookmarks = MutableStateFlow<Set<String>>(emptySet())
-    val dailymotionBookmarks: StateFlow<Set<String>> = _dailymotionBookmarks.asStateFlow()
-
-    private val _dailymotionBookmarkedVideos = MutableStateFlow<List<DailymotionVideo>>(emptyList())
-    val dailymotionBookmarkedVideos: StateFlow<List<DailymotionVideo>> = _dailymotionBookmarkedVideos.asStateFlow()
-
-    private val _relatedDailymotionVideos = MutableStateFlow<List<DailymotionVideo>>(emptyList())
-    val relatedDailymotionVideos: StateFlow<List<DailymotionVideo>> = _relatedDailymotionVideos.asStateFlow()
-
-    fun initDailymotionKeys() {
-        loadDailymotionBookmarks()
-    }
-
-    private fun getDailymotionPrefs() = context.getSharedPreferences("ibadah_dailymotion_prefs", android.content.Context.MODE_PRIVATE)
-
-    fun loadDailymotionBookmarks() {
-        try {
-            val prefs = getDailymotionPrefs()
-            val bookmarkedIds = prefs.getStringSet("bookmarked_ids", emptySet()) ?: emptySet()
-            _dailymotionBookmarks.value = bookmarkedIds
-
-            // Reconstruct DailymotionVideo items for each bookmark
-            val vList = mutableListOf<DailymotionVideo>()
-            val moshi = com.squareup.moshi.Moshi.Builder()
-                .addLast(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
-                .build()
-            val adapter = moshi.adapter(DailymotionVideo::class.java)
-
-            bookmarkedIds.forEach { id ->
-                val json = prefs.getString("video_data_$id", null)
-                if (json != null) {
-                    try {
-                        val video = adapter.fromJson(json)
-                        if (video != null) {
-                            vList.add(video)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            }
-            _dailymotionBookmarkedVideos.value = vList
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun toggleDailymotionBookmark(video: DailymotionVideo) {
-        try {
-            val prefs = getDailymotionPrefs()
-            val currentIds = prefs.getStringSet("bookmarked_ids", emptySet())?.toMutableSet() ?: mutableSetOf()
-            val videoId = video.id
-
-            val moshi = com.squareup.moshi.Moshi.Builder()
-                .addLast(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
-                .build()
-            val adapter = moshi.adapter(DailymotionVideo::class.java)
-
-            if (currentIds.contains(videoId)) {
-                currentIds.remove(videoId)
-                prefs.edit()
-                    .putStringSet("bookmarked_ids", currentIds)
-                    .remove("video_data_$videoId")
-                    .apply()
-            } else {
-                currentIds.add(videoId)
-                val json = adapter.toJson(video)
-                prefs.edit()
-                    .putStringSet("bookmarked_ids", currentIds)
-                    .putString("video_data_$videoId", json)
-                    .apply()
-            }
-            loadDailymotionBookmarks()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun isDailymotionBookmarked(videoId: String): Boolean {
-        return _dailymotionBookmarks.value.contains(videoId)
-    }
-
-    fun searchDailymotion(query: String, category: String, isIslamicFilter: Boolean) {
-        _isDailymotionLoading.value = true
-        _dailymotionSearchResults.value = emptyList()
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val results = com.example.service.DailymotionApiClient.searchVideos(
-                    context = context,
-                    query = query,
-                    category = category,
-                    isIslamicFilter = isIslamicFilter
-                )
-                _dailymotionSearchResults.value = results
-            } catch (e: Exception) {
-                android.util.Log.e("IbadahViewModel", "Error searching Dailymotion", e)
-            } finally {
-                _isDailymotionLoading.value = false
-            }
-        }
-    }
-
-    fun loadRelatedDailymotionVideos(videoId: String) {
-        _relatedDailymotionVideos.value = emptyList()
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val results = com.example.service.DailymotionApiClient.getRelatedVideos(videoId)
-                _relatedDailymotionVideos.value = results
-            } catch (e: Exception) {
-                android.util.Log.e("IbadahViewModel", "Error loading related videos", e)
-            }
-        }
-    }
+    fun initDailymotionKeys() {}
+    fun loadDailymotionBookmarks() {}
+    fun toggleDailymotionBookmark(video: DailymotionVideo) {}
+    fun isDailymotionBookmarked(videoId: String): Boolean = false
+    fun searchDailymotion(query: String, category: String, isIslamicFilter: Boolean) {}
+    fun loadRelatedDailymotionVideos(videoId: String) {}
 }
 
 // --- Data Contracts Helper ---
